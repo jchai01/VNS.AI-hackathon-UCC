@@ -4,7 +4,8 @@ import {
   getMostRequestedFiles, 
   getStatusCodeDistribution, 
   getTopReferrers, 
-  parseUserAgents 
+  parseUserAgents, 
+  getTopIPAddress
 } from '../utils/logUtils';
 import { format } from 'date-fns';
 
@@ -15,6 +16,7 @@ import WorldMap from '../components/WorldMap';
 import StatusCodesTable from '../components/StatusCodesTable';
 import TopReferrers from '../components/TopReferrers';
 import MostRequestedFiles from '../components/MostRequestedFiles';
+import TopIPAddress from '../components/TopIPAddress';
 
 const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) => {
   const [hourlyRequests, setHourlyRequests] = useState({ labels: [], data: [] });
@@ -23,6 +25,7 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
   const [topReferrers, setTopReferrers] = useState([]);
   const [userAgentData, setUserAgentData] = useState({ browsers: [] });
   const [timeInterval, setTimeInterval] = useState('hourly');
+  const [topIPAddress, setTopIPAddress] = useState([]);
   
   // Date filter state
   const [startDate, setStartDate] = useState('');
@@ -36,6 +39,7 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
   // Set initial date range and filename based on log data
   useEffect(() => {
     if (logData && logData.entries && logData.entries.length > 0) {
+
       // Sort entries by date
       const sortedEntries = [...logData.entries].sort((a, b) => 
         a.dateTime.getTime() - b.dateTime.getTime()
@@ -63,6 +67,14 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
       
       // Initial filtering
       setFilteredEntries(logData.entries);
+
+      // Process data for charts
+      setHourlyRequests(getRequestsByHourOfDay(logData.entries));
+      setMostRequestedFiles(getMostRequestedFiles(logData.entries));
+      setTopIPAddress(getTopIPAddress(logData.entries));
+      setStatusCodes(getStatusCodeDistribution(logData.entries));
+      setTopReferrers(getTopReferrers(logData.entries));
+      setUserAgentData(parseUserAgents(logData.entries));
     }
   }, [logData]);
   
@@ -255,8 +267,13 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         <TopReferrers referrers={topReferrers} />
-        <MostRequestedFiles files={mostRequestedFiles} />
       </div>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <MostRequestedFiles files={mostRequestedFiles} />
+        <TopIPAddress files={topIPAddress} />
+      </div>
+      
     </div>
   );
 };
