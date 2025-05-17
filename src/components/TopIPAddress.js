@@ -9,9 +9,9 @@ const TopIPAddress = ({ files }) => {
         <h2 className="text-xl font-semibold">Top 10 IP Address</h2>
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto max-h-80 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
         <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+          <thead className="bg-gray-50 sticky top-0 z-10">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Page

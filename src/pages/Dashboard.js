@@ -33,6 +33,15 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
   const [dateRange, setDateRange] = useState({ min: '', max: '' });
   const [currentFileName, setCurrentFileName] = useState('');
   
+  // New filter states
+  const [methodFilter, setMethodFilter] = useState('all');
+  const [availableMethods, setAvailableMethods] = useState([]);
+  const [ipAddressFilter, setIpAddressFilter] = useState('');
+  const [statusCodeFilter, setStatusCodeFilter] = useState('all');
+  const [availableStatusCodes, setAvailableStatusCodes] = useState([]);
+  const [countryFilter, setCountryFilter] = useState('all');
+  const [availableCountries, setAvailableCountries] = useState([]);
+  
   // Filtered data
   const [filteredEntries, setFilteredEntries] = useState([]);
   
@@ -40,17 +49,25 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
   useEffect(() => {
     if (logData && logData.entries && logData.entries.length > 0) {
 
-      // Sort entries by date
-      const sortedEntries = [...logData.entries].sort((a, b) => 
-        a.dateTime.getTime() - b.dateTime.getTime()
-      );
+      // Sort entries by date - handle ISO string dates from backend
+      const sortedEntries = [...logData.entries].sort((a, b) => {
+        const dateA = typeof a.dateTime === 'string' ? new Date(a.dateTime) : a.dateTime;
+        const dateB = typeof b.dateTime === 'string' ? new Date(b.dateTime) : b.dateTime;
+        return dateA - dateB;
+      });
       
-      const firstDate = sortedEntries[0].dateTime;
-      const lastDate = sortedEntries[sortedEntries.length - 1].dateTime;
+      // Convert to Date objects if they are strings
+      const firstDateObj = typeof sortedEntries[0].dateTime === 'string' 
+        ? new Date(sortedEntries[0].dateTime) 
+        : sortedEntries[0].dateTime;
+      
+      const lastDateObj = typeof sortedEntries[sortedEntries.length - 1].dateTime === 'string'
+        ? new Date(sortedEntries[sortedEntries.length - 1].dateTime)
+        : sortedEntries[sortedEntries.length - 1].dateTime;
       
       // Format dates for input elements
-      const firstDateStr = format(firstDate, 'yyyy-MM-dd');
-      const lastDateStr = format(lastDate, 'yyyy-MM-dd');
+      const firstDateStr = format(firstDateObj, 'yyyy-MM-dd');
+      const lastDateStr = format(lastDateObj, 'yyyy-MM-dd');
       
       setDateRange({
         min: firstDateStr,
@@ -65,6 +82,21 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
         setCurrentFileName(logData.fileName);
       }
       
+      // Extract unique HTTP methods, status codes and countries
+      const methods = new Set();
+      const statuses = new Set();
+      const countries = new Set();
+      
+      logData.entries.forEach(entry => {
+        if (entry.method) methods.add(entry.method);
+        if (entry.statusCode) statuses.add(entry.statusCode);
+        if (entry.country) countries.add(entry.country);
+      });
+      
+      setAvailableMethods(Array.from(methods).sort());
+      setAvailableStatusCodes(Array.from(statuses).sort((a, b) => a - b));
+      setAvailableCountries(Array.from(countries).sort());
+      
       // Initial filtering
       setFilteredEntries(logData.entries);
 
@@ -78,9 +110,9 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
     }
   }, [logData]);
   
-  // Apply date filters when date range changes
+  // Apply all filters when any filter changes
   useEffect(() => {
-    if (!logData || !logData.entries || !startDate || !endDate) return;
+    if (!logData || !logData.entries) return;
     
     // Convert string dates to Date objects for comparison
     const startDateTime = new Date(startDate);
@@ -88,14 +120,29 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
     // Set end date to end of day
     endDateTime.setHours(23, 59, 59, 999);
     
-    // Filter entries by date range
+    // Filter entries by all filters
     const filtered = logData.entries.filter(entry => {
+      // Date filter
       const entryDate = new Date(entry.dateTime);
-      return entryDate >= startDateTime && entryDate <= endDateTime;
+      const passesDateFilter = entryDate >= startDateTime && entryDate <= endDateTime;
+      
+      // Method filter
+      const passesMethodFilter = methodFilter === 'all' || entry.method === methodFilter;
+      
+      // IP address filter
+      const passesIpFilter = !ipAddressFilter || entry.ipAddress.includes(ipAddressFilter);
+      
+      // Status code filter
+      const passesStatusFilter = statusCodeFilter === 'all' || entry.statusCode.toString() === statusCodeFilter;
+      
+      // Country filter
+      const passesCountryFilter = countryFilter === 'all' || entry.country === countryFilter;
+      
+      return passesDateFilter && passesMethodFilter && passesIpFilter && passesStatusFilter && passesCountryFilter;
     });
     
     setFilteredEntries(filtered);
-  }, [startDate, endDate, logData]);
+  }, [startDate, endDate, methodFilter, ipAddressFilter, statusCodeFilter, countryFilter, logData]);
   
   // Process filtered data for charts
   useEffect(() => {
@@ -115,6 +162,14 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
       setUserAgentData(parseUserAgents(filteredEntries));
     }
   }, [filteredEntries, timeInterval]);
+  
+  // Clear all filters
+  const clearFilters = () => {
+    setMethodFilter('all');
+    setIpAddressFilter('');
+    setStatusCodeFilter('all');
+    setCountryFilter('all');
+  };
   
   if (isLoading) {
     return (
@@ -241,6 +296,82 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
             </div>
           </div>
         </div>
+        
+        {/* Additional filters section */}
+        <div className="border-t border-gray-200 pt-4 mt-2">
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="text-sm font-medium text-gray-700">Additional Filters</h3>
+            <button
+              onClick={clearFilters}
+              className="text-xs text-primary-600 hover:text-primary-800"
+            >
+              Clear all filters
+            </button>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Method filter */}
+            <div className="flex flex-col">
+              <label htmlFor="methodFilter" className="text-xs font-medium text-gray-700 mb-1">HTTP Method:</label>
+              <select
+                id="methodFilter"
+                className="px-3 py-2 border border-gray-300 rounded text-sm"
+                value={methodFilter}
+                onChange={(e) => setMethodFilter(e.target.value)}
+              >
+                <option value="all">All Methods</option>
+                {availableMethods.map(method => (
+                  <option key={method} value={method}>{method}</option>
+                ))}
+              </select>
+            </div>
+            
+            {/* IP Address filter */}
+            <div className="flex flex-col">
+              <label htmlFor="ipFilter" className="text-xs font-medium text-gray-700 mb-1">IP Address:</label>
+              <input
+                type="text"
+                id="ipFilter"
+                placeholder="Filter by IP"
+                className="px-3 py-2 border border-gray-300 rounded text-sm"
+                value={ipAddressFilter}
+                onChange={(e) => setIpAddressFilter(e.target.value)}
+              />
+            </div>
+            
+            {/* Status Code filter */}
+            <div className="flex flex-col">
+              <label htmlFor="statusFilter" className="text-xs font-medium text-gray-700 mb-1">Status Code:</label>
+              <select
+                id="statusFilter"
+                className="px-3 py-2 border border-gray-300 rounded text-sm"
+                value={statusCodeFilter}
+                onChange={(e) => setStatusCodeFilter(e.target.value)}
+              >
+                <option value="all">All Status Codes</option>
+                {availableStatusCodes.map(code => (
+                  <option key={code} value={code}>{code}</option>
+                ))}
+              </select>
+            </div>
+            
+            {/* Country filter */}
+            <div className="flex flex-col">
+              <label htmlFor="countryFilter" className="text-xs font-medium text-gray-700 mb-1">Country:</label>
+              <select
+                id="countryFilter"
+                className="px-3 py-2 border border-gray-300 rounded text-sm"
+                value={countryFilter}
+                onChange={(e) => setCountryFilter(e.target.value)}
+              >
+                <option value="all">All Countries</option>
+                {availableCountries.map(country => (
+                  <option key={country} value={country}>{country}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
       </div>
       
       <StatsOverview 
@@ -266,12 +397,12 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <TopReferrers referrers={topReferrers} />
+        <MostRequestedFiles files={mostRequestedFiles} />
+        <TopIPAddress files={topIPAddress} />
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <MostRequestedFiles files={mostRequestedFiles} />
-        <TopIPAddress files={topIPAddress} />
+        <TopReferrers referrers={topReferrers} />
       </div>
       
     </div>
