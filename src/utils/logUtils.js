@@ -1,16 +1,37 @@
-// Get requests by hour of day
-export const getRequestsByHourOfDay = (entries) => {
-  const hourCounts = Array(24).fill(0);
-  
-  entries.forEach(entry => {
-    const hour = entry.dateTime.getHours();
-    hourCounts[hour]++;
-  });
-  
-  return {
-    labels: Array.from({ length: 24 }, (_, i) => `${i}:00`),
-    data: hourCounts
-  };
+import { format } from 'date-fns';
+
+// Get requests by hour of day or by day
+export const getRequestsByHourOfDay = (entries, interval = 'hourly') => {
+  if (interval === 'daily') {
+    const dayCounts = {};
+    
+    entries.forEach(entry => {
+      const date = new Date(entry.dateTime);
+      const key = format(date, 'yyyy-MM-dd');
+      dayCounts[key] = (dayCounts[key] || 0) + 1;
+    });
+    
+    // Sort dates
+    const sortedDates = Object.keys(dayCounts).sort();
+    
+    return {
+      labels: sortedDates.map(date => format(new Date(date), 'MMM dd')),
+      data: sortedDates.map(key => dayCounts[key])
+    };
+  } else {
+    // Hourly aggregation
+    const hourCounts = Array(24).fill(0);
+    
+    entries.forEach(entry => {
+      const hour = entry.dateTime.getHours();
+      hourCounts[hour]++;
+    });
+    
+    return {
+      labels: Array.from({ length: 24 }, (_, i) => `${i}:00`),
+      data: hourCounts
+    };
+  }
 };
 
 // Get requests by path (most requested files)
