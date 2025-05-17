@@ -31,15 +31,29 @@ function App() {
     };
     
     // Send the file to the backend
-    fetch('http://localhost:5000/api/parse-log', {
+    fetch('http://localhost:5001/api/parse-log', {
       method: 'POST',
       body: formData,
-      onUploadProgress: uploadProgressHandler,
-    })
-    .then(response => {
-      if (!response.ok) {
-        throw new Error('Network response was not ok');
+      mode: 'cors',
+      headers: {
+        'Accept': 'application/json',
       }
+    })
+    .then(async response => {
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+        try {
+          const errorJson = JSON.parse(errorText);
+          throw new Error(errorJson.error || 'Failed to upload file');
+        } catch (e) {
+          throw new Error(`Server error (${response.status}): ${errorText || 'No error message provided'}`);
+        }
+      }
+      
       setUploadProgress(100);
       // Start processing progress updates
       let progress = 0;
@@ -58,13 +72,14 @@ function App() {
       });
     })
     .then(data => {
+      console.log('Received data:', data);
       setLogData(data);
       setIsLoading(false);
     })
     .catch(error => {
       console.error('Error uploading log file:', error);
       setIsLoading(false);
-      alert('Failed to upload and process log file');
+      alert(error.message || 'Failed to upload and process log file');
     });
   };
   
