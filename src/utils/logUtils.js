@@ -23,7 +23,9 @@ export const getRequestsByHourOfDay = (entries, interval = 'hourly') => {
     const hourCounts = Array(24).fill(0);
     
     entries.forEach(entry => {
-      const hour = entry.dateTime.getHours();
+      // Handle both string ISO dates and Date objects
+      const date = typeof entry.dateTime === 'string' ? new Date(entry.dateTime) : entry.dateTime;
+      const hour = date.getHours();
       hourCounts[hour]++;
     });
     
