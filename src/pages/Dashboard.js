@@ -4,7 +4,8 @@ import {
   getMostRequestedFiles, 
   getStatusCodeDistribution, 
   getTopReferrers, 
-  parseUserAgents 
+  parseUserAgents, 
+  getTopIPAddress
 } from '../utils/logUtils';
 
 import StatsOverview from '../components/StatsOverview';
@@ -15,12 +16,14 @@ import WorldMap from '../components/WorldMap';
 import StatusCodesTable from '../components/StatusCodesTable';
 import TopReferrers from '../components/TopReferrers';
 import MostRequestedFiles from '../components/MostRequestedFiles';
+import TopIPAddress from '../components/TopIPAddress';
 
 const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) => {
   const [hourlyRequests, setHourlyRequests] = useState({ labels: [], data: [] });
   const [mostRequestedFiles, setMostRequestedFiles] = useState([]);
   const [statusCodes, setStatusCodes] = useState([]);
   const [topReferrers, setTopReferrers] = useState([]);
+  const [topIPAddress, setTopIPAddress] = useState([]);
   const [userAgentData, setUserAgentData] = useState({ browsers: [], devices: [] });
   
   useEffect(() => {
@@ -28,6 +31,7 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
       // Process data for charts
       setHourlyRequests(getRequestsByHourOfDay(logData.entries));
       setMostRequestedFiles(getMostRequestedFiles(logData.entries));
+      setTopIPAddress(getTopIPAddress(logData.entries));
       setStatusCodes(getStatusCodeDistribution(logData.entries));
       setTopReferrers(getTopReferrers(logData.entries));
       setUserAgentData(parseUserAgents(logData.entries));
@@ -133,9 +137,11 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
         <TopReferrers referrers={topReferrers} />
       </div>
       
-      <div className="mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         <MostRequestedFiles files={mostRequestedFiles} />
+        <TopIPAddress files={topIPAddress} />
       </div>
+      
     </div>
   );
 };
