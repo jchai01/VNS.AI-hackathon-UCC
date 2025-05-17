@@ -7,10 +7,10 @@ import {
   parseUserAgents, 
   getTopIPAddress
 } from '../utils/logUtils';
+import { format } from 'date-fns';
 
 import StatsOverview from '../components/StatsOverview';
 import RequestsChart from '../components/RequestsChart';
-import DeviceChart from '../components/DeviceChart';
 import BrowserChart from '../components/BrowserChart';
 import WorldMap from '../components/WorldMap';
 import StatusCodesTable from '../components/StatusCodesTable';
@@ -23,11 +23,51 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
   const [mostRequestedFiles, setMostRequestedFiles] = useState([]);
   const [statusCodes, setStatusCodes] = useState([]);
   const [topReferrers, setTopReferrers] = useState([]);
+  const [userAgentData, setUserAgentData] = useState({ browsers: [] });
+  const [timeInterval, setTimeInterval] = useState('hourly');
   const [topIPAddress, setTopIPAddress] = useState([]);
-  const [userAgentData, setUserAgentData] = useState({ browsers: [], devices: [] });
   
+  // Date filter state
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [dateRange, setDateRange] = useState({ min: '', max: '' });
+  const [currentFileName, setCurrentFileName] = useState('');
+  
+  // Filtered data
+  const [filteredEntries, setFilteredEntries] = useState([]);
+  
+  // Set initial date range and filename based on log data
   useEffect(() => {
     if (logData && logData.entries && logData.entries.length > 0) {
+
+      // Sort entries by date
+      const sortedEntries = [...logData.entries].sort((a, b) => 
+        a.dateTime.getTime() - b.dateTime.getTime()
+      );
+      
+      const firstDate = sortedEntries[0].dateTime;
+      const lastDate = sortedEntries[sortedEntries.length - 1].dateTime;
+      
+      // Format dates for input elements
+      const firstDateStr = format(firstDate, 'yyyy-MM-dd');
+      const lastDateStr = format(lastDate, 'yyyy-MM-dd');
+      
+      setDateRange({
+        min: firstDateStr,
+        max: lastDateStr
+      });
+      
+      setStartDate(firstDateStr);
+      setEndDate(lastDateStr);
+      
+      // Set the file name if available
+      if (logData.fileName) {
+        setCurrentFileName(logData.fileName);
+      }
+      
+      // Initial filtering
+      setFilteredEntries(logData.entries);
+
       // Process data for charts
       setHourlyRequests(getRequestsByHourOfDay(logData.entries));
       setMostRequestedFiles(getMostRequestedFiles(logData.entries));
@@ -37,6 +77,44 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
       setUserAgentData(parseUserAgents(logData.entries));
     }
   }, [logData]);
+  
+  // Apply date filters when date range changes
+  useEffect(() => {
+    if (!logData || !logData.entries || !startDate || !endDate) return;
+    
+    // Convert string dates to Date objects for comparison
+    const startDateTime = new Date(startDate);
+    const endDateTime = new Date(endDate);
+    // Set end date to end of day
+    endDateTime.setHours(23, 59, 59, 999);
+    
+    // Filter entries by date range
+    const filtered = logData.entries.filter(entry => {
+      const entryDate = new Date(entry.dateTime);
+      return entryDate >= startDateTime && entryDate <= endDateTime;
+    });
+    
+    setFilteredEntries(filtered);
+  }, [startDate, endDate, logData]);
+  
+  // Process filtered data for charts
+  useEffect(() => {
+    if (filteredEntries.length > 0) {
+      // Process data for charts based on filtered entries
+      if (timeInterval === 'hourly') {
+        setHourlyRequests(getRequestsByHourOfDay(filteredEntries));
+      } else {
+        // Handle daily interval
+        const dailyData = getRequestsByHourOfDay(filteredEntries, 'daily');
+        setHourlyRequests(dailyData);
+      }
+      
+      setMostRequestedFiles(getMostRequestedFiles(filteredEntries));
+      setStatusCodes(getStatusCodeDistribution(filteredEntries));
+      setTopReferrers(getTopReferrers(filteredEntries));
+      setUserAgentData(parseUserAgents(filteredEntries));
+    }
+  }, [filteredEntries, timeInterval]);
   
   if (isLoading) {
     return (
@@ -110,11 +188,66 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
   
   return (
     <div>
+      {/* File info and date filters section */}
+      <div className="bg-white rounded-lg shadow-md p-4 mb-6">
+        <div className="flex flex-col md:flex-row justify-between items-center mb-4">
+          <div className="mb-4 md:mb-0">
+            <h2 className="text-lg font-medium text-gray-800">
+              Log File: <span className="font-normal text-gray-600">{currentFileName || 'nginx-access.log'}</span>
+            </h2>
+            <p className="text-sm text-gray-500">
+              <span className="font-medium">Total entries:</span> {filteredEntries.length.toLocaleString()} of {logData.entries.length.toLocaleString()}
+            </p>
+          </div>
+          
+          <div className="flex flex-wrap gap-4">
+            <div className="flex items-center space-x-2">
+              <label htmlFor="startDate" className="text-sm font-medium text-gray-700">From:</label>
+              <input 
+                type="date" 
+                id="startDate"
+                className="px-3 py-2 border border-gray-300 rounded text-sm"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                min={dateRange.min}
+                max={dateRange.max}
+              />
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <label htmlFor="endDate" className="text-sm font-medium text-gray-700">To:</label>
+              <input 
+                type="date" 
+                id="endDate"
+                className="px-3 py-2 border border-gray-300 rounded text-sm"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                min={dateRange.min}
+                max={dateRange.max}
+              />
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <label htmlFor="timeInterval" className="text-sm font-medium text-gray-700">View:</label>
+              <select
+                id="timeInterval"
+                className="px-3 py-2 border border-gray-300 rounded text-sm"
+                value={timeInterval}
+                onChange={(e) => setTimeInterval(e.target.value)}
+              >
+                <option value="hourly">Hourly</option>
+                <option value="daily">Daily</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+      
       <StatsOverview 
         stats={{
-          sessions: logData.uniqueVisitors,
-          requests: logData.totalRequests,
-          bandwidth: logData.totalBandwidth,
+          sessions: new Set(filteredEntries.map(entry => entry.ipAddress)).size,
+          requests: filteredEntries.length,
+          bandwidth: filteredEntries.reduce((sum, entry) => sum + entry.bytes, 0),
         }}
       />
       
@@ -122,18 +255,17 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
         <RequestsChart 
           labels={hourlyRequests.labels}
           data={hourlyRequests.data}
-          logData={logData}
+          timeInterval={timeInterval}
         />
-        <WorldMap entries={logData.entries} />
+        <WorldMap entries={filteredEntries} />
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <DeviceChart devices={userAgentData.devices} />
         <BrowserChart browsers={userAgentData.browsers} />
+        <StatusCodesTable statusCodes={statusCodes} />
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <StatusCodesTable statusCodes={statusCodes} />
         <TopReferrers referrers={topReferrers} />
       </div>
       

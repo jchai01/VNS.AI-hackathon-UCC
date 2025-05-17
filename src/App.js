@@ -77,6 +77,7 @@ function App() {
         
         // All processing is done
         const finalData = {
+          fileName: logFile.name,
           entries: allParsedEntries,
           totalRequests: allParsedEntries.length,
           uniqueVisitors: new Set(allParsedEntries.map(entry => entry.ipAddress)).size,
