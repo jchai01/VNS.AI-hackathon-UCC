@@ -3,36 +3,67 @@ from flask_cors import CORS
 import re
 from datetime import datetime
 import json
+import logging
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+logging.basicConfig(level=logging.DEBUG)
 
-@app.route('/api/parse-log', methods=['POST'])
-def parse_log():
-    if 'file' not in request.files:
-        return jsonify({"error": "No file part"}), 400
-        
-    file = request.files['file']
-    
-    if file.filename == '':
-        return jsonify({"error": "No selected file"}), 400
-        
-    content = file.read().decode('utf-8')
-    lines = content.split('\n')
-    lines = [line for line in lines if line.strip()]
-    
-    parsed_entries = parse_nginx_log(lines)
-    
-    # Calculate summary statistics
-    result = {
-        "fileName": file.filename,
-        "entries": parsed_entries,
-        "totalRequests": len(parsed_entries),
-        "uniqueVisitors": len(set(entry["ipAddress"] for entry in parsed_entries)),
-        "totalBandwidth": sum(entry["bytes"] for entry in parsed_entries),
+# Configure CORS to allow all origins in development
+CORS(app, resources={
+    r"/*": {
+        "origins": "*",
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization", "Accept"],
+        "supports_credentials": False,
+        "expose_headers": ["Content-Range", "X-Content-Range"]
     }
+})
+
+@app.route('/api/parse-log', methods=['POST', 'OPTIONS'])
+def parse_log():
+    app.logger.debug(f"Received request: Method={request.method}, Headers={dict(request.headers)}")
     
-    return jsonify(result)
+    # Handle preflight request
+    if request.method == 'OPTIONS':
+        response = jsonify({'message': 'OK'})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+        return response
+    
+    try:
+        app.logger.debug(f"Files in request: {request.files}")
+        if 'file' not in request.files:
+            app.logger.error("No file part in the request")
+            return jsonify({"error": "No file part"}), 400
+            
+        file = request.files['file']
+        
+        if file.filename == '':
+            app.logger.error("No selected file")
+            return jsonify({"error": "No selected file"}), 400
+            
+        app.logger.info(f"Processing file: {file.filename}")
+        content = file.read().decode('utf-8')
+        lines = content.split('\n')
+        lines = [line for line in lines if line.strip()]
+        
+        parsed_entries = parse_nginx_log(lines)
+        
+        # Calculate summary statistics
+        result = {
+            "fileName": file.filename,
+            "entries": parsed_entries,
+            "totalRequests": len(parsed_entries),
+            "uniqueVisitors": len(set(entry["ipAddress"] for entry in parsed_entries)),
+            "totalBandwidth": sum(entry["bytes"] for entry in parsed_entries),
+        }
+        
+        app.logger.info("Successfully processed file")
+        return jsonify(result)
+    except Exception as e:
+        app.logger.error(f"Error processing request: {str(e)}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
 
 def parse_nginx_log(lines):
     # Standard log format regex
@@ -100,4 +131,4 @@ def parse_nginx_log(lines):
     return parsed_entries
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000) 
+    app.run(host='0.0.0.0', debug=True, port=5001) 
