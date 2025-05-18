@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify, send_file
-from flask_cors import CORS
+from flask_cors import CORS, cross_origin
+from flask import Response
 import re
 import plotly.express as px
 import plotly.graph_objects as go
@@ -11,20 +12,21 @@ import logging
 from user_agents import parse
 from anomaly_detection import analyze_anomalies
 import psycopg2
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.DEBUG)
 
 # Configure CORS to allow all origins in development
-CORS(app, resources={
-    r"/*": {
-        "origins": "*",
-        "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization", "Accept"],
-        "supports_credentials": False,
-        "expose_headers": ["Content-Range", "X-Content-Range"]
-    }
-})
+#CORS(app, resources={
+#    r"/*": {
+#        "origins": "*",
+#        "methods": ["GET", "POST", "OPTIONS"],
+#        "allow_headers": ["Content-Type", "Authorization", "Accept"],
+#        "supports_credentials": False,
+#        "expose_headers": ["Content-Range", "X-Content-Range"]
+#    }
+#})
 
 # Connect to the database
 conn = psycopg2.connect(database="mydb", user="postgres",
@@ -61,7 +63,46 @@ def getIp():
         app.logger.error(f"Error processing request: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/parse-log', methods=['POST', 'OPTIONS'])
+#@app.route('/api/parse-log', methods=['POST', 'OPTIONS'])
+#CORS(app)  # Enable CORS for all routes
+
+#app.wsgi_app = ProxyFix(
+#    app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1
+#)
+
+#CORS(app, resources={
+#        r"/*": {
+#            #"origins": ["*"],  # Allow all origins (replace with your frontend URL in production)
+#            "origins": ["https://landfutures-oidc.insight-centre.org/"],  # Allow all origins (replace with your frontend URL in production)
+#            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+#            "allow_headers": ["Content-Type", "Authorization"]
+#        }
+#     },
+#     supports_credentials=True)  # If using cookies/auth
+
+
+white = ['http://localhost:8080','http://localhost:9000', 'https://landfutures-oidc.insight-centre.org']
+
+@app.before_request
+def basic_authentication():
+    if request.method.lower() == 'options':
+        return Response()
+
+@app.after_request
+def add_cors_headers(response):
+    r = request.referrer[:-1]
+    if r in white:
+        response.headers.add('Access-Control-Allow-Origin', r)
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        response.headers.add('Access-Control-Allow-Headers', 'Cache-Control')
+        response.headers.add('Access-Control-Allow-Headers', 'X-Requested-With')
+        response.headers.add('Access-Control-Allow-Headers', 'Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE')
+    return response
+
+@app.route('/api/parse-log', methods=['GET', 'POST', 'OPTIONS'])
+@cross_origin(origin='*')
 def parse_log():
     app.logger.debug(f"Received request: Method={request.method}, Headers={dict(request.headers)}")
     
@@ -69,7 +110,8 @@ def parse_log():
     if request.method == 'OPTIONS':
         response = jsonify({'message': 'OK'})
         response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        #response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Headers', '*')
         response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
         return response
     
@@ -500,4 +542,4 @@ def parse_nginx_log(lines):
     return parsed_entries
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', debug=True, port=5001) 
+    app.run(host='0.0.0.0', port=5002) 
