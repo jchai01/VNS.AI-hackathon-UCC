@@ -24,6 +24,10 @@ import HttpMethodsChart from '../components/HttpMethodsChart';
 import OsDistributionChart from '../components/OsDistributionChart';
 import HumanVsBotChart from '../components/HumanVsBotChart';
 import ResponseSizeChart from '../components/ResponseSizeChart';
+import AnomalyDetection from '../components/AnomalyDetection';
+import AnomalyTimeline from '../components/AnomalyTimeline';
+import AnomalySummary from '../components/AnomalySummary';
+// import AnomalyCorrelationMatrix from '../components/AnomalyCorrelationMatrix';
 
 const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) => {
   const [hourlyRequests, setHourlyRequests] = useState({ labels: [], data: [] });
@@ -54,6 +58,10 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
   
   // Filtered data
   const [filteredEntries, setFilteredEntries] = useState([]);
+  
+  // Add new state for anomaly data
+  const [anomalyData, setAnomalyData] = useState(null);
+  const [isLoadingAnomalies, setIsLoadingAnomalies] = useState(false);
   
   // Set initial date range and filename based on log data
   useEffect(() => {
@@ -178,6 +186,57 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
       setResponseSizeData(getResponseSizeDistribution(filteredEntries));
     }
   }, [filteredEntries, timeInterval]);
+  
+  // Add useEffect for fetching anomaly data when filtered entries change
+  useEffect(() => {
+    const fetchAnomalyData = async () => {
+      if (filteredEntries.length > 0) {
+        setIsLoadingAnomalies(true);
+        try {
+          const response = await fetch('http://localhost:5001/api/analyze-anomalies', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ entries: filteredEntries })
+          });
+          
+          if (!response.ok) {
+            throw new Error(`Server responded with ${response.status}`);
+          }
+          
+          const data = await response.json();
+          setAnomalyData(data);
+        } catch (error) {
+          console.error('Error fetching anomaly data:', error);
+          setAnomalyData({
+            status: 'error',
+            message: error.message,
+            error_bursts: [],
+            high_traffic_ips: [],
+            unusual_patterns: []
+          });
+        } finally {
+          setIsLoadingAnomalies(false);
+        }
+      }
+    };
+    
+    // Fetch anomaly data but not on every filter change
+    // Using a debounce approach by only triggering when filteredEntries changes significantly
+    const entriesCountChanged = prevFilteredEntriesCount => {
+      return !prevFilteredEntriesCount || 
+        Math.abs(filteredEntries.length - prevFilteredEntriesCount) > (filteredEntries.length * 0.1);
+    };
+    
+    // Store current entries count
+    const currentCount = filteredEntries.length;
+    
+    // Only fetch if entries have changed significantly or there's no existing anomaly data
+    if (!anomalyData || entriesCountChanged(anomalyData.entriesCount)) {
+      fetchAnomalyData();
+    }
+  }, [filteredEntries]);
   
   // Clear all filters
   const clearFilters = () => {
@@ -461,13 +520,24 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
         }}
       />
       
+      
+      {/* Add Anomaly Correlation Section
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <div className="md:col-span-2">
+          <AnomalyCorrelationMatrix 
+            anomalyData={anomalyData}
+            logData={filteredEntries} 
+          />
+        </div>
+      </div> */}
+      
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         <RequestsChart 
           labels={hourlyRequests.labels}
           data={hourlyRequests.data}
           timeInterval={timeInterval}
         />
-        <WorldMap entries={filteredEntries} />
+        <WorldMap logData={filteredEntries} />
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -492,8 +562,19 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         <HumanVsBotChart trafficData={humanVsBotTraffic} />
+        <AnomalyDetection anomalyData={anomalyData} isLoading={isLoadingAnomalies} />
+      </div>
+
+      {/* Add Anomaly Timeline */}
+      <div className="mb-6">
+        <AnomalyTimeline 
+          anomalyData={anomalyData} 
+          logData={filteredEntries} 
+        />
       </div>
       
+      {/* Add Anomaly Summary */}
+      <AnomalySummary anomalyData={anomalyData} />
     </div>
   );
 };
