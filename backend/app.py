@@ -11,6 +11,7 @@ import io
 from collections import Counter
 import logging 
 from user_agents import parse
+from anomaly_detection import analyze_anomalies
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.DEBUG)
@@ -97,6 +98,28 @@ def export_summary():
     })
     
     return response
+
+@app.route('/api/analyze-anomalies', methods=['POST'])
+def analyze_log_anomalies():
+    try:
+        data = request.json
+        if not data or 'entries' not in data:
+            return jsonify({"error": "No data provided"}), 400
+        
+        entries = data.get('entries', [])
+        
+        # Convert entries to DataFrame for anomaly detection
+        df = pd.DataFrame(entries)
+        if not df.empty and 'dateTime' in df.columns:
+            df['dateTime'] = pd.to_datetime(df['dateTime'])
+        
+        # Run anomaly detection
+        result = analyze_anomalies(df)
+        
+        return jsonify(result)
+    except Exception as e:
+        app.logger.error(f"Error detecting anomalies: {str(e)}", exc_info=True)
+        return jsonify({"error": str(e), "status": "error"}), 500
 
 # Chart generation functions
 def create_empty_figure(message="No data"):
