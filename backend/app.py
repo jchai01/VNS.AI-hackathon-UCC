@@ -12,6 +12,7 @@ from collections import Counter
 import logging 
 from user_agents import parse
 from anomaly_detection import analyze_anomalies
+import os
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.DEBUG)
@@ -464,6 +465,35 @@ def parse_nginx_log(lines):
         })
     
     return parsed_entries
+
+# Add new endpoint to serve the geolocation CSV data
+@app.route('/api/geolocation-data', methods=['GET'])
+def get_geolocation_data():
+    try:
+        csv_path = '../csv_output/geo_cache.csv'
+        
+        if os.path.exists(csv_path):
+            # Read CSV file and convert to JSON
+            geo_df = pd.read_csv(csv_path)
+            
+            # Use ip_address as the key in the dictionary
+            geo_data = {}
+            for _, row in geo_df.iterrows():
+                ip = row['ip_address']
+                geo_data[ip] = {
+                    'lat': row['latitude'],
+                    'lng': row['longitude'],
+                    'city': row['city'],
+                    'country': row['country']
+                }
+            
+            return jsonify(geo_data)
+        else:
+            app.logger.error(f"Geolocation CSV file not found at {csv_path}")
+            return jsonify({"error": "Geolocation data file not found"}), 404
+    except Exception as e:
+        app.logger.error(f"Error serving geolocation data: {str(e)}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True, port=5001) 

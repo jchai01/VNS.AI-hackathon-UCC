@@ -412,14 +412,9 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
   if (!logData) {
     return (
       <div className="bg-white rounded-lg shadow-md p-8 text-center">
-        <h2 className="text-2xl font-semibold text-gray-800 mb-2">Welcome to Nginx Access Log Analyzer</h2>
+        <h2 className="text-2xl font-semibold text-gray-800 mb-2">Welcome to VS Log Analyzer</h2>
         <p className="text-gray-600 mb-6">Upload an Nginx access log file to get started</p>
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 max-w-xl mx-auto">
-          <h3 className="font-semibold text-gray-700 mb-2">Compatible log formats</h3>
-          <code className="block bg-gray-100 p-3 rounded text-sm overflow-x-auto">
-            {`log_format main '$remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent "$http_referer" "$http_user_agent"';`}
-          </code>
-        </div>
+        
       </div>
     );
   }
@@ -676,7 +671,7 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
           data={hourlyRequests.data}
           timeInterval={timeInterval}
         />
-        <WorldMap logData={filteredEntries} />
+        <WorldMap logData={filteredEntries} anomalyData={anomalyData} />
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">

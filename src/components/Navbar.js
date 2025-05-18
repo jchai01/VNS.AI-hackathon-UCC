@@ -43,7 +43,7 @@ const Navbar = ({ onLogUpload }) => {
       <div className="container mx-auto px-4 py-3">
         <div className="flex items-center justify-between">
           <Link to="/" className="text-xl font-bold">
-            Nginx Access Log Analyzer
+            VS Log Analyzer
           </Link>
           
           <div className="relative">

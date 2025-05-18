@@ -1,5 +1,5 @@
 {
-  "name": "nginx-access-log-analyzer",
+  "name": "VS Log Analyzer",
   "version": "1.0.0",
   "private": true,
   "dependencies": {

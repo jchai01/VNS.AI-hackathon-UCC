@@ -1,77 +1,101 @@
 import React, { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, Tooltip, CircleMarker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Tooltip, CircleMarker, Popup, ZoomControl } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
+import { loadGeolocationData } from '../utils/csvParser';
 
-// Enhanced mock geo-IP database with city information
-const mockGeoData = [
-  { ipRange: ['0.0.0.0', '30.0.0.0'], city: 'New York', country: 'United States', code: 'US', lat: 40.7128, lng: -74.006 },
-  { ipRange: ['30.0.0.0', '50.0.0.0'], city: 'Los Angeles', country: 'United States', code: 'US', lat: 34.0522, lng: -118.2437 },
-  { ipRange: ['50.0.0.0', '70.0.0.0'], city: 'San Francisco', country: 'United States', code: 'US', lat: 37.7749, lng: -122.4194 },
-  { ipRange: ['70.0.0.0', '90.0.0.0'], city: 'Chicago', country: 'United States', code: 'US', lat: 41.8781, lng: -87.6298 },
-  { ipRange: ['90.0.0.0', '120.0.0.0'], city: 'Beijing', country: 'China', code: 'CN', lat: 39.9042, lng: 116.4074 },
-  { ipRange: ['120.0.0.0', '130.0.0.0'], city: 'Shanghai', country: 'China', code: 'CN', lat: 31.2304, lng: 121.4737 },
-  { ipRange: ['130.0.0.0', '140.0.0.0'], city: 'Tokyo', country: 'Japan', code: 'JP', lat: 35.6762, lng: 139.6503 },
-  { ipRange: ['140.0.0.0', '150.0.0.0'], city: 'London', country: 'United Kingdom', code: 'GB', lat: 51.5074, lng: -0.1278 },
-  { ipRange: ['150.0.0.0', '160.0.0.0'], city: 'Berlin', country: 'Germany', code: 'DE', lat: 52.5200, lng: 13.4050 },
-  { ipRange: ['160.0.0.0', '170.0.0.0'], city: 'Paris', country: 'France', code: 'FR', lat: 48.8566, lng: 2.3522 },
-  { ipRange: ['170.0.0.0', '180.0.0.0'], city: 'Mumbai', country: 'India', code: 'IN', lat: 19.0760, lng: 72.8777 },
-  { ipRange: ['180.0.0.0', '190.0.0.0'], city: 'Delhi', country: 'India', code: 'IN', lat: 28.6139, lng: 77.2090 },
-  { ipRange: ['190.0.0.0', '200.0.0.0'], city: 'São Paulo', country: 'Brazil', code: 'BR', lat: -23.5505, lng: -46.6333 },
-  { ipRange: ['200.0.0.0', '255.255.255.255'], city: 'Sydney', country: 'Australia', code: 'AU', lat: -33.8688, lng: 151.2093 },
-];
-
-const WorldMap = ({ entries }) => {
+const WorldMap = ({ logData, anomalyData }) => {
   const [locationData, setLocationData] = useState([]);
+  const [geoData, setGeoData] = useState({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [pulseStep, setPulseStep] = useState(0);
+  const [mapKey, setMapKey] = useState(Date.now()); // Add key for map reloading
+  
+  // Pulse animation effect
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setPulseStep(prev => (prev + 1) % 30);
+    }, 50);
+    
+    return () => clearInterval(interval);
+  }, []);
+  
+  // Force map reload when anomalyData changes
+  useEffect(() => {
+    if (anomalyData) {
+      setMapKey(Date.now());
+    }
+  }, [anomalyData]);
+  
+  // Load geolocation data from CSV
+  useEffect(() => {
+    async function fetchGeoData() {
+      setIsLoading(true);
+      try {
+        const data = await loadGeolocationData();
+        setGeoData(data);
+      } catch (error) {
+        console.error('Failed to load geolocation data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    
+    fetchGeoData();
+  }, []);
   
   useEffect(() => {
-    if (!entries || entries.length === 0) return;
+    if (!logData || logData.length === 0 || Object.keys(geoData).length === 0) return;
     
     // Group entries by IP and analyze each group
     const ipGroups = {};
     
-    entries.forEach(entry => {
+    logData.forEach(entry => {
       if (!ipGroups[entry.ipAddress]) {
         ipGroups[entry.ipAddress] = [];
       }
       ipGroups[entry.ipAddress].push(entry);
     });
     
-    // Assign each IP to a city based on our mock geo database
-    const locationEntries = [];
+    // Create sets of anomalous IPs from anomaly data for quick lookups
+    const highTrafficIPs = new Set();
+    const unusualPatternIPs = new Set();
     
-    Object.entries(ipGroups).forEach(([ip, ipEntries]) => {
-      // Convert IP to a number for range comparison (simplified)
-      const ipParts = ip.split('.');
-      const ipNum = (
-        parseInt(ipParts[0] || 0) * 16777216 + 
-        parseInt(ipParts[1] || 0) * 65536 + 
-        parseInt(ipParts[2] || 0) * 256 + 
-        parseInt(ipParts[3] || 0)
-      );
-      
-      // Find matching geo location from our mock data
-      const geoLocation = mockGeoData.find(geo => {
-        const minIpParts = geo.ipRange[0].split('.');
-        const maxIpParts = geo.ipRange[1].split('.');
-        
-        const minIpNum = (
-          parseInt(minIpParts[0] || 0) * 16777216 + 
-          parseInt(minIpParts[1] || 0) * 65536 + 
-          parseInt(minIpParts[2] || 0) * 256 + 
-          parseInt(minIpParts[3] || 0)
-        );
-        
-        const maxIpNum = (
-          parseInt(maxIpParts[0] || 0) * 16777216 + 
-          parseInt(maxIpParts[1] || 0) * 65536 + 
-          parseInt(maxIpParts[2] || 0) * 256 + 
-          parseInt(maxIpParts[3] || 0)
-        );
-        
-        return ipNum >= minIpNum && ipNum <= maxIpNum;
+    if (anomalyData && anomalyData.status === 'success') {
+      // Extract high traffic IPs
+      anomalyData.high_traffic_ips.forEach(item => {
+        highTrafficIPs.add(item.ip_address);
       });
       
+      // Extract IPs with unusual patterns
+      anomalyData.unusual_patterns.forEach(item => {
+        unusualPatternIPs.add(item.ip_address);
+      });
+      
+      // Log for debugging
+      console.log('Anomaly data processed:', { 
+        highTrafficCount: highTrafficIPs.size, 
+        unusualPatternsCount: unusualPatternIPs.size 
+      });
+    }
+    
+    // Process each IP group and map to locations
+    const locationEntries = [];
+    const locationsByKey = {};
+    
+    Object.entries(ipGroups).forEach(([ip, ipEntries]) => {
+      // Get geolocation data for this IP
+      const geoLocation = geoData[ip];
+      
       if (geoLocation) {
+        // Determine anomaly status for this IP
+        const hasHighTraffic = highTrafficIPs.has(ip);
+        const hasUnusualPattern = unusualPatternIPs.has(ip);
+        const anomalyStatus = hasHighTraffic && hasUnusualPattern 
+          ? 'critical' 
+          : hasHighTraffic || hasUnusualPattern 
+            ? 'warning' 
+            : 'normal';
+        
         // Calculate statistics for this IP
         const requestsByMethod = {};
         const requestsByPath = {};
@@ -97,13 +121,13 @@ const WorldMap = ({ entries }) => {
           .sort((a, b) => b[1] - a[1])
           .slice(0, 3); // Top 3 paths
           
-        // Check if this location already exists in our result
-        const existingLocation = locationEntries.find(
-          loc => loc.city === geoLocation.city && loc.country === geoLocation.country
-        );
+        // Generate a unique key for this location
+        const locationKey = `${geoLocation.city}-${geoLocation.country}`;
         
-        if (existingLocation) {
+        // Check if this location already exists in our results
+        if (locationsByKey[locationKey]) {
           // Update existing location data
+          const existingLocation = locationsByKey[locationKey];
           existingLocation.count += ipEntries.length;
           existingLocation.ips.add(ip);
           
@@ -121,18 +145,37 @@ const WorldMap = ({ entries }) => {
           Object.entries(statusCodes).forEach(([code, count]) => {
             existingLocation.statusCodes[code] = (existingLocation.statusCodes[code] || 0) + count;
           });
+          
+          // Update anomaly status (prioritize critical > warning > normal)
+          if (anomalyStatus === 'critical' || 
+             (anomalyStatus === 'warning' && existingLocation.anomalyStatus !== 'critical')) {
+            existingLocation.anomalyStatus = anomalyStatus;
+          }
+          
+          // Add IP to the anomalous IP lists if applicable
+          if (hasHighTraffic) existingLocation.highTrafficIPs.add(ip);
+          if (hasUnusualPattern) existingLocation.unusualPatternIPs.add(ip);
         } else {
           // Add new location
-          locationEntries.push({
-            ...geoLocation,
+          const newLocation = {
+            lat: geoLocation.lat,
+            lng: geoLocation.lng,
+            city: geoLocation.city,
+            country: geoLocation.country,
             count: ipEntries.length,
             ips: new Set([ip]),
             methods: requestsByMethod,
             paths: requestsByPath,
             statusCodes,
+            anomalyStatus,
+            highTrafficIPs: hasHighTraffic ? new Set([ip]) : new Set(),
+            unusualPatternIPs: hasUnusualPattern ? new Set([ip]) : new Set(),
             topMethod: topMethod ? topMethod[0] : null,
             topPaths
-          });
+          };
+          
+          locationEntries.push(newLocation);
+          locationsByKey[locationKey] = newLocation;
         }
       }
     });
@@ -146,22 +189,100 @@ const WorldMap = ({ entries }) => {
       location.topPaths = pathsArray.slice(0, 3).map(([path, count]) => ({ path, count }));
     });
     
+    console.log('Location data processed:', {
+      totalLocations: locationEntries.length,
+      locationsWithAnomalies: locationEntries.filter(l => l.anomalyStatus !== 'normal').length
+    });
+    
     setLocationData(locationEntries);
-  }, [entries]);
+  }, [logData, geoData, anomalyData]);
   
   // Get maximum count for scaling circle sizes
   const maxCount = Math.max(...locationData.map(location => location.count), 1);
   
+  // Function to get marker color based on anomaly status
+  const getMarkerColor = (status) => {
+    switch (status) {
+      case 'critical':
+        return '#ef4444'; // Bright red
+      case 'warning':
+        return '#f97316'; // Bright orange
+      default:
+        return '#3b82f6'; // Bright blue
+    }
+  };
+  
+  // Function to get marker fill opacity based on anomaly status
+  const getMarkerOpacity = (status, isPulsing = false) => {
+    if (isPulsing) {
+      // For critical nodes, pulse the opacity between 0.5 and 0.9
+      const pulseValue = 0.5 + (pulseStep / 30) * 0.4;
+      return status === 'critical' ? pulseValue : getMarkerOpacity(status);
+    }
+    
+    switch (status) {
+      case 'critical':
+        return 0.8;
+      case 'warning':
+        return 0.7;
+      default:
+        return 0.6;
+    }
+  };
+  
+  // Function to get marker size based on count and anomaly status
+  const getMarkerRadius = (count, maxCount, status) => {
+    // Base size calculation
+    const baseSize = Math.max(5, Math.sqrt(count / maxCount) * 25);
+    
+    // Make critical markers slightly larger
+    if (status === 'critical') {
+      return baseSize * 1.2;
+    } else if (status === 'warning') {
+      return baseSize * 1.1;
+    }
+    
+    return baseSize;
+  };
+  
+  if (isLoading) {
+    return (
+      <div className="card">
+        <h2 className="text-xl font-semibold mb-4">Sessions by Location</h2>
+        <div className="h-96 flex items-center justify-center">
+          <div className="text-gray-500">Loading geolocation data...</div>
+        </div>
+      </div>
+    );
+  }
+  
   return (
     <div className="card">
       <h2 className="text-xl font-semibold mb-4">Sessions by Location</h2>
-      <div className="h-96">
+      
+      <div className="h-96 relative">
+        {locationData.length === 0 && (
+          <div className="absolute inset-0 flex items-center justify-center z-10 bg-white bg-opacity-70">
+            <div className="text-gray-600 text-center p-4 bg-white rounded-lg shadow-md">
+              <p>No location data available for the selected logs.</p>
+              <p className="text-sm mt-1">This could be because the IP addresses in your logs are not in the geolocation database.</p>
+            </div>
+          </div>
+        )}
+        
         <MapContainer
+          key={mapKey} // Force map to re-render when anomaly data changes
           center={[20, 0]}
           zoom={2}
           style={{ height: '100%', width: '100%', borderRadius: '0.5rem' }}
           scrollWheelZoom={true}
+          minZoom={1}
+          maxZoom={18}
+          zoomControl={false}
+          worldCopyJump={true}
         >
+          <ZoomControl position="bottomright" />
+          
           <TileLayer
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -169,22 +290,31 @@ const WorldMap = ({ entries }) => {
           
           {locationData.map((location, index) => (
             <CircleMarker
-              key={`${location.city}-${index}`}
+              key={`${location.city}-${location.country}-${index}-${location.anomalyStatus}`}
               center={[location.lat, location.lng]}
-              radius={Math.max(5, Math.sqrt(location.count / maxCount) * 25)}
-              fillColor="#4338ca"
-              color="#4338ca"
-              weight={1}
-              opacity={0.8}
-              fillOpacity={0.6}
+              radius={getMarkerRadius(location.count, maxCount, location.anomalyStatus)}
+              fillColor={getMarkerColor(location.anomalyStatus)}
+              color={getMarkerColor(location.anomalyStatus)}
+              weight={location.anomalyStatus === 'critical' ? 2 : 1.5}
+              opacity={0.9}
+              fillOpacity={getMarkerOpacity(location.anomalyStatus, true)}
             >
               <Tooltip>
                 <div>
                   <div className="font-bold text-base border-b border-gray-300 pb-1 mb-1">
                     {location.city}, {location.country}
+                    {location.anomalyStatus !== 'normal' && (
+                      <span className={`ml-2 text-xs font-normal px-1.5 py-0.5 rounded ${
+                        location.anomalyStatus === 'critical' 
+                          ? 'bg-red-100 text-red-800' 
+                          : 'bg-orange-100 text-orange-800'
+                      }`}>
+                        {location.anomalyStatus === 'critical' ? 'Critical' : 'Warning'}
+                      </span>
+                    )}
                   </div>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                    <div className="font-medium">Sessions:</div>
+                    <div className="font-medium">Requests:</div>
                     <div>{location.count}</div>
                     
                     <div className="font-medium">Unique IPs:</div>
@@ -192,6 +322,20 @@ const WorldMap = ({ entries }) => {
                     
                     <div className="font-medium">Top Method:</div>
                     <div>{location.topMethod}</div>
+                    
+                    {location.anomalyStatus !== 'normal' && (
+                      <>
+                        <div className="font-medium">Anomalies:</div>
+                        <div>
+                          {location.highTrafficIPs.size > 0 && (
+                            <span className="text-xs bg-red-100 text-red-800 px-1.5 py-0.5 rounded">High Traffic</span>
+                          )}
+                          {location.unusualPatternIPs.size > 0 && (
+                            <span className="text-xs bg-orange-100 text-orange-800 px-1.5 py-0.5 rounded ml-1">Unusual Patterns</span>
+                          )}
+                        </div>
+                      </>
+                    )}
                   </div>
                   
                   <div className="mt-2 border-t border-gray-300 pt-1">
@@ -209,15 +353,44 @@ const WorldMap = ({ entries }) => {
               
               <Popup>
                 <div className="max-w-sm">
-                  <h3 className="font-bold text-base mb-2">{location.city}, {location.country}</h3>
+                  <h3 className="font-bold text-base mb-2">
+                    {location.city}, {location.country}
+                    {location.anomalyStatus !== 'normal' && (
+                      <span className={`ml-2 text-xs font-normal px-1.5 py-0.5 rounded ${
+                        location.anomalyStatus === 'critical' 
+                          ? 'bg-red-100 text-red-800' 
+                          : 'bg-orange-100 text-orange-800'
+                      }`}>
+                        {location.anomalyStatus === 'critical' ? 'Critical' : 'Warning'}
+                      </span>
+                    )}
+                  </h3>
                   
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm mb-3">
-                    <div className="font-medium">Sessions:</div>
+                    <div className="font-medium">Requests:</div>
                     <div>{location.count}</div>
                     
                     <div className="font-medium">Unique IPs:</div>
                     <div>{location.ips.size}</div>
                   </div>
+                  
+                  {location.anomalyStatus !== 'normal' && (
+                    <div className="mb-3 p-2 rounded bg-gray-50">
+                      <div className="font-medium text-sm mb-1">Anomaly Details:</div>
+                      <div className="text-xs space-y-1">
+                        {location.highTrafficIPs.size > 0 && (
+                          <div>
+                            <span className="font-medium">High Traffic IPs:</span> {location.highTrafficIPs.size} IP(s) with unusually high request rates
+                          </div>
+                        )}
+                        {location.unusualPatternIPs.size > 0 && (
+                          <div>
+                            <span className="font-medium">Unusual Patterns:</span> {location.unusualPatternIPs.size} IP(s) with suspicious behavior patterns
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                   
                   <div className="mb-3">
                     <div className="font-medium text-sm mb-1">Top Methods:</div>
@@ -271,8 +444,22 @@ const WorldMap = ({ entries }) => {
           ))}
         </MapContainer>
       </div>
-      <div className="text-xs text-gray-500 mt-2 text-center">
-        Circles represent cities with session activity. Click for detailed information.
+      <div className="flex justify-between items-center text-xs text-gray-500 mt-2">
+        <div>Circles represent cities with session activity. Click for detailed information.</div>
+        <div className="flex items-center space-x-3">
+          <div className="flex items-center">
+            <div className="w-3 h-3 rounded-full mr-1 animate-pulse" style={{backgroundColor: '#ef4444'}}></div>
+            <span>Critical</span>
+          </div>
+          <div className="flex items-center">
+            <div className="w-3 h-3 rounded-full mr-1" style={{backgroundColor: '#f97316'}}></div>
+            <span>Warning</span>
+          </div>
+          <div className="flex items-center">
+            <div className="w-3 h-3 rounded-full mr-1" style={{backgroundColor: '#3b82f6'}}></div>
+            <span>Normal</span>
+          </div>
+        </div>
       </div>
     </div>
   );
