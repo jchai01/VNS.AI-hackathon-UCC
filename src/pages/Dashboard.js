@@ -5,7 +5,10 @@ import {
   getStatusCodeDistribution, 
   getTopReferrers, 
   parseUserAgents, 
-  getTopIPAddress
+  getTopIPAddress,
+  getHttpMethodsDistribution,
+  getHumanVsBotTraffic,
+  getResponseSizeDistribution
 } from '../utils/logUtils';
 import { format } from 'date-fns';
 
@@ -17,15 +20,22 @@ import StatusCodesTable from '../components/StatusCodesTable';
 import TopReferrers from '../components/TopReferrers';
 import MostRequestedFiles from '../components/MostRequestedFiles';
 import TopIPAddress from '../components/TopIPAddress';
+import HttpMethodsChart from '../components/HttpMethodsChart';
+import OsDistributionChart from '../components/OsDistributionChart';
+import HumanVsBotChart from '../components/HumanVsBotChart';
+import ResponseSizeChart from '../components/ResponseSizeChart';
 
 const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) => {
   const [hourlyRequests, setHourlyRequests] = useState({ labels: [], data: [] });
   const [mostRequestedFiles, setMostRequestedFiles] = useState([]);
   const [statusCodes, setStatusCodes] = useState([]);
   const [topReferrers, setTopReferrers] = useState([]);
-  const [userAgentData, setUserAgentData] = useState({ browsers: [] });
+  const [userAgentData, setUserAgentData] = useState({ browsers: [], devices: [], operatingSystems: [] });
   const [timeInterval, setTimeInterval] = useState('hourly');
   const [topIPAddress, setTopIPAddress] = useState([]);
+  const [httpMethods, setHttpMethods] = useState([]);
+  const [humanVsBotTraffic, setHumanVsBotTraffic] = useState([]);
+  const [responseSizeData, setResponseSizeData] = useState([]);
   
   // Date filter state
   const [startDate, setStartDate] = useState('');
@@ -107,6 +117,9 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
       setStatusCodes(getStatusCodeDistribution(logData.entries));
       setTopReferrers(getTopReferrers(logData.entries));
       setUserAgentData(parseUserAgents(logData.entries));
+      setHttpMethods(getHttpMethodsDistribution(logData.entries));
+      setHumanVsBotTraffic(getHumanVsBotTraffic(logData.entries));
+      setResponseSizeData(getResponseSizeDistribution(logData.entries));
     }
   }, [logData]);
   
@@ -160,6 +173,9 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
       setStatusCodes(getStatusCodeDistribution(filteredEntries));
       setTopReferrers(getTopReferrers(filteredEntries));
       setUserAgentData(parseUserAgents(filteredEntries));
+      setHttpMethods(getHttpMethodsDistribution(filteredEntries));
+      setHumanVsBotTraffic(getHumanVsBotTraffic(filteredEntries));
+      setResponseSizeData(getResponseSizeDistribution(filteredEntries));
     }
   }, [filteredEntries, timeInterval]);
   
@@ -169,6 +185,63 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
     setIpAddressFilter('');
     setStatusCodeFilter('all');
     setCountryFilter('all');
+  };
+  
+  // Function to export HTML summary report
+  const exportSummaryReport = async () => {
+    try {
+      // Prepare data to send to the backend
+      const exportData = {
+        entries: filteredEntries,
+        stats: {
+          sessions: new Set(filteredEntries.map(entry => entry.ipAddress)).size,
+          requests: filteredEntries.length,
+          bandwidth: filteredEntries.reduce((sum, entry) => sum + entry.bytes, 0),
+        },
+        filters: {
+          startDate,
+          endDate,
+          methodFilter,
+          ipAddressFilter,
+          statusCodeFilter,
+          countryFilter
+        }
+      };
+      
+      // Send request to the backend to generate the HTML report
+      const response = await fetch('http://localhost:5001/api/export-summary', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(exportData),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to generate report');
+      }
+      
+      const data = await response.json();
+      
+      // Create a blob with the HTML content
+      const blob = new Blob([data.content], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      
+      // Create a temporary link and trigger download
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = data.filename;
+      document.body.appendChild(link);
+      link.click();
+      
+      // Clean up
+      URL.revokeObjectURL(url);
+      document.body.removeChild(link);
+      
+    } catch (error) {
+      console.error('Error exporting summary report:', error);
+      alert('Failed to export summary report. Please try again.');
+    }
   };
   
   if (isLoading) {
@@ -253,6 +326,12 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
             <p className="text-sm text-gray-500">
               <span className="font-medium">Total entries:</span> {filteredEntries.length.toLocaleString()} of {logData.entries.length.toLocaleString()}
             </p>
+            <button
+              onClick={() => exportSummaryReport()}
+              className="mt-2 px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
+            >
+              Export Summary Report
+            </button>
           </div>
           
           <div className="flex flex-wrap gap-4">
@@ -403,6 +482,16 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         <TopReferrers referrers={topReferrers} />
+        <HttpMethodsChart methods={httpMethods} />
+      </div>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <OsDistributionChart osData={userAgentData.operatingSystems} />
+        <ResponseSizeChart sizeData={responseSizeData} />
+      </div>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <HumanVsBotChart trafficData={humanVsBotTraffic} />
       </div>
       
     </div>
