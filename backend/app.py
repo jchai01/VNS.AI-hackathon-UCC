@@ -4,6 +4,12 @@ import re
 from datetime import datetime
 import json
 import logging
+from chat_routes import chat_bp
+from dotenv import load_dotenv
+import os
+
+# Load environment variables
+load_dotenv()
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.DEBUG)
@@ -18,6 +24,9 @@ CORS(app, resources={
         "expose_headers": ["Content-Range", "X-Content-Range"]
     }
 })
+
+# Register the chat blueprint
+app.register_blueprint(chat_bp)
 
 @app.route('/api/parse-log', methods=['POST', 'OPTIONS'])
 def parse_log():
@@ -88,6 +97,7 @@ def parse_nginx_log(lines):
                 method, path, http_version = '', '', ''
             else:
                 # If neither regex matches, skip this line
+                print(f"Skipping unmatched line: {line}")
                 continue
         else:
             # Extract values from standard log format
@@ -112,12 +122,24 @@ def parse_nginx_log(lines):
                 parsed_date = datetime(int(year), month_num, int(day), 
                                       int(hour), int(minute), int(second))
                 date_time_iso = parsed_date.isoformat()
+                print(f"Date parsing details:", {
+                    'original': date_time,
+                    'day': day,
+                    'month': month,
+                    'year': year,
+                    'hour': hour,
+                    'minute': minute,
+                    'second': second,
+                    'parsed_iso': date_time_iso
+                })
             else:
+                print(f"Failed to match date pattern in: {date_time}")
                 date_time_iso = None
-        except Exception:
+        except Exception as e:
+            print(f"Error parsing date {date_time}: {str(e)}")
             date_time_iso = None
         
-        parsed_entries.append({
+        entry = {
             "ipAddress": ip_address,
             "dateTime": date_time_iso,
             "method": method,
@@ -126,9 +148,16 @@ def parse_nginx_log(lines):
             "bytes": int(bytes_sent),
             "referer": referer if referer != '-' else None,
             "userAgent": user_agent
-        })
+        }
+        print(f"Parsed entry:", entry)
+        parsed_entries.append(entry)
     
+    print(f"Total entries parsed: {len(parsed_entries)}")
     return parsed_entries
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', debug=True, port=5001) 
+    port = int(os.getenv('PORT', 5001))
+    host = os.getenv('HOST', '0.0.0.0')
+    debug = os.getenv('FLASK_DEBUG', '1') == '1'
+    
+    app.run(host=host, port=port, debug=debug) 

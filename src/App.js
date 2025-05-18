@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Dashboard from './pages/Dashboard';
 import Footer from './components/Footer';
+import Chat from './components/Chat';
 
 function App() {
   // State to store the parsed log data
@@ -10,6 +11,95 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [processingProgress, setProcessingProgress] = useState(0);
+  
+  // Add filter state
+  const [filters, setFilters] = useState({
+    dateFrom: '',
+    dateTo: '',
+    method: '',
+    path: '',
+    statusCode: '',
+    browser: ''
+  });
+
+  // Function to format date from AI response to HTML input format (YYYY-MM-DD)
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '';
+    
+    try {
+      // If already in YYYY-MM-DD format
+      if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        return dateStr;
+      }
+      
+      // If in DD/MM/YYYY format
+      if (dateStr.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+        const [day, month, year] = dateStr.split('/');
+        return `${year}-${month}-${day}`;
+      }
+      
+      // Try parsing as a regular date
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return ''; // Invalid date
+      return date.toISOString().split('T')[0];
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return '';
+    }
+  };
+
+  // Function to update filters from AI response
+  const handleAIResponse = useCallback((response) => {
+    try {
+      console.log('handleAIResponse called with:', response);
+      
+      // If response is a string that looks like JSON, parse it
+      let jsonData;
+      if (typeof response === 'string') {
+        if (response.trim().startsWith('{')) {
+          try {
+            jsonData = JSON.parse(response);
+            console.log('Parsed JSON data:', jsonData);
+          } catch (e) {
+            console.error('Failed to parse JSON response:', e);
+            return;
+          }
+        } else {
+          console.log('Not a JSON string, ignoring');
+          return;
+        }
+      } else if (typeof response === 'object') {
+        jsonData = response;
+        console.log('Response is already an object:', jsonData);
+      } else {
+        console.log('Invalid response type, ignoring');
+        return;
+      }
+
+      // Update filters while preserving existing values if AI doesn't provide new ones
+      const newFilters = {
+        dateFrom: jsonData.date_from || filters.dateFrom,
+        dateTo: jsonData.date_to || filters.dateTo,
+        method: (jsonData.method || '').toUpperCase(),
+        path: jsonData.path || filters.path,
+        statusCode: jsonData.status_code ? String(jsonData.status_code) : filters.statusCode,
+        browser: jsonData.browser || filters.browser
+      };
+
+      console.log('Current filters:', filters);
+      console.log('New filters:', newFilters);
+
+      // Only update if there are actual changes
+      if (JSON.stringify(newFilters) !== JSON.stringify(filters)) {
+        console.log('Filters are different, updating state with:', newFilters);
+        setFilters(newFilters);
+      } else {
+        console.log('No changes in filters, skipping update');
+      }
+    } catch (error) {
+      console.error('Error in handleAIResponse:', error);
+    }
+  }, [filters]);
   
   const handleLogUpload = (logFile) => {
     setIsLoading(true);
@@ -50,54 +140,43 @@ function App() {
           const errorJson = JSON.parse(errorText);
           throw new Error(errorJson.error || 'Failed to upload file');
         } catch (e) {
-          throw new Error(`Server error (${response.status}): ${errorText || 'No error message provided'}`);
+          throw new Error(errorText || 'Failed to upload file');
         }
       }
       
-      setUploadProgress(100);
-      // Start processing progress updates
-      let progress = 0;
-      const processingInterval = setInterval(() => {
-        progress += 5;
-        if (progress >= 99) {
-          clearInterval(processingInterval);
-        }
-        setProcessingProgress(progress);
-      }, 200);
-      
-      return response.json().then(data => {
-        clearInterval(processingInterval);
-        setProcessingProgress(100);
-        return data;
-      });
+      return response.json();
     })
     .then(data => {
-      console.log('Received data:', data);
       setLogData(data);
-      setIsLoading(false);
+      setProcessingProgress(100);
     })
     .catch(error => {
-      console.error('Error uploading log file:', error);
+      console.error('Error:', error);
+      alert(error.message);
+    })
+    .finally(() => {
       setIsLoading(false);
-      alert(error.message || 'Failed to upload and process log file');
     });
   };
-  
+
   return (
-    <div className="flex flex-col min-h-screen">
-      <Navbar onLogUpload={handleLogUpload} />
-      <main className="flex-grow container mx-auto px-4 py-8">
+    <div className="min-h-screen bg-gray-50">
+      <Navbar onFileUpload={handleLogUpload} />
+      <main className="container mx-auto px-4 py-8">
         <Routes>
           <Route path="/" element={
             <Dashboard 
               logData={logData} 
               isLoading={isLoading} 
-              uploadProgress={uploadProgress}
+              uploadProgress={uploadProgress} 
               processingProgress={processingProgress}
+              filters={filters}
+              setFilters={setFilters}
             />
           } />
         </Routes>
       </main>
+      <Chat onAIResponse={handleAIResponse} onFilterChange={setFilters} />
       <Footer />
     </div>
   );

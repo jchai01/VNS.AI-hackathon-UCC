@@ -20,9 +20,12 @@ ChartJS.register(
   Legend
 );
 
-const BrowserChart = ({ browsers }) => {
+const BrowserChart = ({ browsers = [] }) => {
+  // Ensure browsers is an array
+  const browserArray = Array.isArray(browsers) ? browsers : [];
+  
   // Sort browsers by hits in descending order
-  const sortedBrowsers = [...browsers].sort((a, b) => b.hits - a.hits);
+  const sortedBrowsers = [...browserArray].sort((a, b) => b.hits - a.hits);
   
   // Check if "Other" or "Others" exists in the data
   const otherIndex = sortedBrowsers.findIndex(b => 
@@ -119,6 +122,15 @@ const BrowserChart = ({ browsers }) => {
       },
     },
   };
+
+  if (browserArray.length === 0) {
+    return (
+      <div className="card">
+        <h2 className="text-xl font-semibold mb-4">Browser Distribution</h2>
+        <div className="text-gray-500 text-center py-8">No browser data available</div>
+      </div>
+    );
+  }
 
   return (
     <div className="card">

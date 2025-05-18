@@ -9,6 +9,7 @@ import {
 } from '../utils/logUtils';
 import { format } from 'date-fns';
 
+import FilterPanel from '../components/FilterPanel';
 import StatsOverview from '../components/StatsOverview';
 import RequestsChart from '../components/RequestsChart';
 import BrowserChart from '../components/BrowserChart';
@@ -18,199 +19,155 @@ import TopReferrers from '../components/TopReferrers';
 import MostRequestedFiles from '../components/MostRequestedFiles';
 import TopIPAddress from '../components/TopIPAddress';
 
-const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) => {
-  const [hourlyRequests, setHourlyRequests] = useState({ labels: [], data: [] });
-  const [mostRequestedFiles, setMostRequestedFiles] = useState([]);
-  const [statusCodes, setStatusCodes] = useState([]);
-  const [topReferrers, setTopReferrers] = useState([]);
-  const [userAgentData, setUserAgentData] = useState({ browsers: [] });
-  const [timeInterval, setTimeInterval] = useState('hourly');
-  const [topIPAddress, setTopIPAddress] = useState([]);
-  
-  // Date filter state
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [dateRange, setDateRange] = useState({ min: '', max: '' });
-  const [currentFileName, setCurrentFileName] = useState('');
-  
-  // New filter states
-  const [methodFilter, setMethodFilter] = useState('all');
-  const [availableMethods, setAvailableMethods] = useState([]);
-  const [ipAddressFilter, setIpAddressFilter] = useState('');
-  const [statusCodeFilter, setStatusCodeFilter] = useState('all');
-  const [availableStatusCodes, setAvailableStatusCodes] = useState([]);
-  const [countryFilter, setCountryFilter] = useState('all');
-  const [availableCountries, setAvailableCountries] = useState([]);
-  
-  // Filtered data
-  const [filteredEntries, setFilteredEntries] = useState([]);
-  
-  // Set initial date range and filename based on log data
-  useEffect(() => {
-    if (logData && logData.entries && logData.entries.length > 0) {
+const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress, filters, setFilters }) => {
+  const [filteredData, setFilteredData] = useState(null);
 
-      // Sort entries by date - handle ISO string dates from backend
-      const sortedEntries = [...logData.entries].sort((a, b) => {
-        const dateA = typeof a.dateTime === 'string' ? new Date(a.dateTime) : a.dateTime;
-        const dateB = typeof b.dateTime === 'string' ? new Date(b.dateTime) : b.dateTime;
-        return dateA - dateB;
-      });
-      
-      // Convert to Date objects if they are strings
-      const firstDateObj = typeof sortedEntries[0].dateTime === 'string' 
-        ? new Date(sortedEntries[0].dateTime) 
-        : sortedEntries[0].dateTime;
-      
-      const lastDateObj = typeof sortedEntries[sortedEntries.length - 1].dateTime === 'string'
-        ? new Date(sortedEntries[sortedEntries.length - 1].dateTime)
-        : sortedEntries[sortedEntries.length - 1].dateTime;
-      
-      // Format dates for input elements
-      const firstDateStr = format(firstDateObj, 'yyyy-MM-dd');
-      const lastDateStr = format(lastDateObj, 'yyyy-MM-dd');
-      
-      setDateRange({
-        min: firstDateStr,
-        max: lastDateStr
-      });
-      
-      setStartDate(firstDateStr);
-      setEndDate(lastDateStr);
-      
-      // Set the file name if available
-      if (logData.fileName) {
-        setCurrentFileName(logData.fileName);
-      }
-      
-      // Extract unique HTTP methods, status codes and countries
-      const methods = new Set();
-      const statuses = new Set();
-      const countries = new Set();
-      
-      logData.entries.forEach(entry => {
-        if (entry.method) methods.add(entry.method);
-        if (entry.statusCode) statuses.add(entry.statusCode);
-        if (entry.country) countries.add(entry.country);
-      });
-      
-      setAvailableMethods(Array.from(methods).sort());
-      setAvailableStatusCodes(Array.from(statuses).sort((a, b) => a - b));
-      setAvailableCountries(Array.from(countries).sort());
-      
-      // Initial filtering
-      setFilteredEntries(logData.entries);
+  // Function to filter log data based on filters
+  const filterLogData = (data) => {
+    if (!data || !data.entries) return null;
 
-      // Process data for charts
-      setHourlyRequests(getRequestsByHourOfDay(logData.entries));
-      setMostRequestedFiles(getMostRequestedFiles(logData.entries));
-      setTopIPAddress(getTopIPAddress(logData.entries));
-      setStatusCodes(getStatusCodeDistribution(logData.entries));
-      setTopReferrers(getTopReferrers(logData.entries));
-      setUserAgentData(parseUserAgents(logData.entries));
-    }
-  }, [logData]);
-  
-  // Apply all filters when any filter changes
-  useEffect(() => {
-    if (!logData || !logData.entries) return;
-    
-    // Convert string dates to Date objects for comparison
-    const startDateTime = new Date(startDate);
-    const endDateTime = new Date(endDate);
-    // Set end date to end of day
-    endDateTime.setHours(23, 59, 59, 999);
-    
-    // Filter entries by all filters
-    const filtered = logData.entries.filter(entry => {
+    console.log('Filtering data with filters:', filters);
+    console.log('Total entries before filtering:', data.entries.length);
+
+    let filtered = data.entries.filter(entry => {
       // Date filter
-      const entryDate = new Date(entry.dateTime);
-      const passesDateFilter = entryDate >= startDateTime && entryDate <= endDateTime;
-      
-      // Method filter
-      const passesMethodFilter = methodFilter === 'all' || entry.method === methodFilter;
-      
-      // IP address filter
-      const passesIpFilter = !ipAddressFilter || entry.ipAddress.includes(ipAddressFilter);
-      
-      // Status code filter
-      const passesStatusFilter = statusCodeFilter === 'all' || entry.statusCode.toString() === statusCodeFilter;
-      
-      // Country filter
-      const passesCountryFilter = countryFilter === 'all' || entry.country === countryFilter;
-      
-      return passesDateFilter && passesMethodFilter && passesIpFilter && passesStatusFilter && passesCountryFilter;
-    });
-    
-    setFilteredEntries(filtered);
-  }, [startDate, endDate, methodFilter, ipAddressFilter, statusCodeFilter, countryFilter, logData]);
-  
-  // Process filtered data for charts
-  useEffect(() => {
-    if (filteredEntries.length > 0) {
-      // Process data for charts based on filtered entries
-      if (timeInterval === 'hourly') {
-        setHourlyRequests(getRequestsByHourOfDay(filteredEntries));
-      } else {
-        // Handle daily interval
-        const dailyData = getRequestsByHourOfDay(filteredEntries, 'daily');
-        setHourlyRequests(dailyData);
+      if (filters.dateFrom || filters.dateTo) {
+        if (!entry.dateTime) {
+          console.log('Entry has no dateTime:', entry);
+          return false;
+        }
+
+        const entryDate = new Date(entry.dateTime);
+        if (isNaN(entryDate.getTime())) {
+          console.log('Invalid entry date:', entry.dateTime);
+          return false;
+        }
+
+        // Set time to start of day for proper date comparison
+        entryDate.setUTCHours(0, 0, 0, 0);
+        
+        if (filters.dateFrom) {
+          const fromDate = new Date(filters.dateFrom);
+          fromDate.setUTCHours(0, 0, 0, 0);
+          if (fromDate > entryDate) {
+            console.log('Entry date before from date:', {
+              entryDate: entryDate.toISOString(),
+              fromDate: fromDate.toISOString()
+            });
+            return false;
+          }
+        }
+        
+        if (filters.dateTo) {
+          const toDate = new Date(filters.dateTo);
+          toDate.setUTCHours(0, 0, 0, 0);
+          if (toDate < entryDate) {
+            console.log('Entry date after to date:', {
+              entryDate: entryDate.toISOString(),
+              toDate: toDate.toISOString()
+            });
+            return false;
+          }
+        }
       }
-      
-      setMostRequestedFiles(getMostRequestedFiles(filteredEntries));
-      setStatusCodes(getStatusCodeDistribution(filteredEntries));
-      setTopReferrers(getTopReferrers(filteredEntries));
-      setUserAgentData(parseUserAgents(filteredEntries));
+
+      // Method filter
+      if (filters.method && entry.method !== filters.method) {
+        console.log('Method mismatch:', {
+          entryMethod: entry.method,
+          filterMethod: filters.method
+        });
+        return false;
+      }
+
+      // Path filter
+      if (filters.path && !entry.path.includes(filters.path)) {
+        console.log('Path mismatch:', {
+          entryPath: entry.path,
+          filterPath: filters.path
+        });
+        return false;
+      }
+
+      // Status code filter - only apply if not -1 (which means "no filter")
+      if (filters.statusCode && filters.statusCode !== '-1' && String(entry.statusCode) !== filters.statusCode) {
+        console.log('Status code mismatch:', {
+          entryStatusCode: entry.statusCode,
+          filterStatusCode: filters.statusCode,
+          comparison: String(entry.statusCode) !== filters.statusCode
+        });
+        return false;
+      }
+
+      // Browser filter
+      if (filters.browser) {
+        const userAgent = entry.userAgent.toLowerCase();
+        const browser = filters.browser.toLowerCase();
+        if (!userAgent.includes(browser)) {
+          console.log('Browser mismatch:', {
+            entryUserAgent: userAgent,
+            filterBrowser: browser
+          });
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    console.log('Total entries after filtering:', filtered.length);
+    if (filtered.length > 0) {
+      console.log('Sample of filtered entries:', filtered.slice(0, 2));
     }
-  }, [filteredEntries, timeInterval]);
-  
-  // Clear all filters
-  const clearFilters = () => {
-    setMethodFilter('all');
-    setIpAddressFilter('');
-    setStatusCodeFilter('all');
-    setCountryFilter('all');
+
+    return {
+      ...data,
+      entries: filtered,
+      totalRequests: filtered.length,
+      uniqueVisitors: new Set(filtered.map(entry => entry.ipAddress)).size,
+      totalBandwidth: filtered.reduce((sum, entry) => sum + entry.bytes, 0)
+    };
   };
-  
+
+  // Update filtered data when logData or filters change
+  useEffect(() => {
+    if (logData) {
+      console.log('Dashboard: Filters changed:', filters);
+      const filtered = filterLogData(logData);
+      console.log('Dashboard: Filtered data:', filtered);
+      setFilteredData(filtered);
+    }
+  }, [logData, filters]);
+
   if (isLoading) {
     return (
-      <div className="bg-white rounded-lg shadow-md p-8 text-center">
-        <h2 className="text-2xl font-semibold text-gray-800 mb-6">Processing Log File</h2>
-        
-        <div className="max-w-xl mx-auto mb-8">
-          <div className="mb-6">
-            <div className="flex justify-between mb-1">
-              <span className="text-sm font-medium text-gray-700">Uploading</span>
-              <span className="text-sm font-medium text-gray-700">{uploadProgress}%</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-2.5">
-              <div 
-                className="bg-primary-600 h-2.5 rounded-full transition-all duration-300" 
-                style={{ width: `${uploadProgress}%` }}
-              ></div>
-            </div>
+      <div className="bg-white rounded-lg shadow-md p-8">
+        <div className="flex flex-col items-center">
+          <div className="mb-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
           </div>
-          
-          {uploadProgress === 100 && (
-            <div className="mb-2">
-              <div className="flex justify-between mb-1">
-                <span className="text-sm font-medium text-gray-700">Processing</span>
-                <span className="text-sm font-medium text-gray-700">{processingProgress}%</span>
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">Processing Log File</h2>
+          <div className="w-full max-w-md">
+            <div className="relative pt-1">
+              <div className="flex mb-2 items-center justify-between">
+                <div>
+                  <span className="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-primary-600 bg-primary-200">
+                    Progress
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="text-xs font-semibold inline-block text-primary-600">
+                    {uploadProgress < 100 ? uploadProgress : processingProgress}%
+                  </span>
+                </div>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-2.5">
-                <div 
-                  className="bg-green-500 h-2.5 rounded-full transition-all duration-300" 
-                  style={{ width: `${processingProgress}%` }}
+              <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-primary-200">
+                <div
+                  style={{ width: `${uploadProgress < 100 ? uploadProgress : processingProgress}%` }}
+                  className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-primary-500 transition-all duration-500"
                 ></div>
               </div>
             </div>
-          )}
-          
-          <div className="text-gray-600 mt-4">
-            {uploadProgress < 100 ? (
-              <p>Uploading log file, please wait...</p>
-            ) : (
-              <p>Analyzing log data. This may take a moment for large files.</p>
-            )}
           </div>
 
           <div className="mt-6 text-xs text-gray-500">
@@ -241,171 +198,47 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
     );
   }
   
+  // Use filteredData instead of logData for all components
+  const stats = {
+    sessions: filteredData?.uniqueVisitors || 0,
+    requests: filteredData?.totalRequests || 0,
+    bandwidth: filteredData?.totalBandwidth || 0
+  };
+
+  const hourlyData = filteredData ? getRequestsByHourOfDay(filteredData.entries) : { labels: [], data: [] };
+  const browserData = filteredData ? parseUserAgents(filteredData.entries) : { browsers: [], devices: [] };
+  const statusCodes = filteredData ? getStatusCodeDistribution(filteredData.entries) : [];
+  const topReferrers = filteredData ? getTopReferrers(filteredData.entries) : [];
+  const mostRequestedFiles = filteredData ? getMostRequestedFiles(filteredData.entries) : [];
+  const topIPAddresses = filteredData ? getTopIPAddress(filteredData.entries) : [];
+
   return (
-    <div>
-      {/* File info and date filters section */}
-      <div className="bg-white rounded-lg shadow-md p-4 mb-6">
-        <div className="flex flex-col md:flex-row justify-between items-center mb-4">
-          <div className="mb-4 md:mb-0">
-            <h2 className="text-lg font-medium text-gray-800">
-              Log File: <span className="font-normal text-gray-600">{currentFileName || 'nginx-access.log'}</span>
-            </h2>
-            <p className="text-sm text-gray-500">
-              <span className="font-medium">Total entries:</span> {filteredEntries.length.toLocaleString()} of {logData.entries.length.toLocaleString()}
-            </p>
-          </div>
-          
-          <div className="flex flex-wrap gap-4">
-            <div className="flex items-center space-x-2">
-              <label htmlFor="startDate" className="text-sm font-medium text-gray-700">From:</label>
-              <input 
-                type="date" 
-                id="startDate"
-                className="px-3 py-2 border border-gray-300 rounded text-sm"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                min={dateRange.min}
-                max={dateRange.max}
-              />
-            </div>
-            
-            <div className="flex items-center space-x-2">
-              <label htmlFor="endDate" className="text-sm font-medium text-gray-700">To:</label>
-              <input 
-                type="date" 
-                id="endDate"
-                className="px-3 py-2 border border-gray-300 rounded text-sm"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                min={dateRange.min}
-                max={dateRange.max}
-              />
-            </div>
-            
-            <div className="flex items-center space-x-2">
-              <label htmlFor="timeInterval" className="text-sm font-medium text-gray-700">View:</label>
-              <select
-                id="timeInterval"
-                className="px-3 py-2 border border-gray-300 rounded text-sm"
-                value={timeInterval}
-                onChange={(e) => setTimeInterval(e.target.value)}
-              >
-                <option value="hourly">Hourly</option>
-                <option value="daily">Daily</option>
-              </select>
-            </div>
-          </div>
-        </div>
-        
-        {/* Additional filters section */}
-        <div className="border-t border-gray-200 pt-4 mt-2">
-          <div className="flex justify-between items-center mb-3">
-            <h3 className="text-sm font-medium text-gray-700">Additional Filters</h3>
-            <button
-              onClick={clearFilters}
-              className="text-xs text-primary-600 hover:text-primary-800"
-            >
-              Clear all filters
-            </button>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Method filter */}
-            <div className="flex flex-col">
-              <label htmlFor="methodFilter" className="text-xs font-medium text-gray-700 mb-1">HTTP Method:</label>
-              <select
-                id="methodFilter"
-                className="px-3 py-2 border border-gray-300 rounded text-sm"
-                value={methodFilter}
-                onChange={(e) => setMethodFilter(e.target.value)}
-              >
-                <option value="all">All Methods</option>
-                {availableMethods.map(method => (
-                  <option key={method} value={method}>{method}</option>
-                ))}
-              </select>
-            </div>
-            
-            {/* IP Address filter */}
-            <div className="flex flex-col">
-              <label htmlFor="ipFilter" className="text-xs font-medium text-gray-700 mb-1">IP Address:</label>
-              <input
-                type="text"
-                id="ipFilter"
-                placeholder="Filter by IP"
-                className="px-3 py-2 border border-gray-300 rounded text-sm"
-                value={ipAddressFilter}
-                onChange={(e) => setIpAddressFilter(e.target.value)}
-              />
-            </div>
-            
-            {/* Status Code filter */}
-            <div className="flex flex-col">
-              <label htmlFor="statusFilter" className="text-xs font-medium text-gray-700 mb-1">Status Code:</label>
-              <select
-                id="statusFilter"
-                className="px-3 py-2 border border-gray-300 rounded text-sm"
-                value={statusCodeFilter}
-                onChange={(e) => setStatusCodeFilter(e.target.value)}
-              >
-                <option value="all">All Status Codes</option>
-                {availableStatusCodes.map(code => (
-                  <option key={code} value={code}>{code}</option>
-                ))}
-              </select>
-            </div>
-            
-            {/* Country filter */}
-            <div className="flex flex-col">
-              <label htmlFor="countryFilter" className="text-xs font-medium text-gray-700 mb-1">Country:</label>
-              <select
-                id="countryFilter"
-                className="px-3 py-2 border border-gray-300 rounded text-sm"
-                value={countryFilter}
-                onChange={(e) => setCountryFilter(e.target.value)}
-              >
-                <option value="all">All Countries</option>
-                {availableCountries.map(country => (
-                  <option key={country} value={country}>{country}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
+    <>
+      <FilterPanel filters={filters} setFilters={setFilters} />
+      
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <StatsOverview stats={stats} />
       </div>
-      
-      <StatsOverview 
-        stats={{
-          sessions: new Set(filteredEntries.map(entry => entry.ipAddress)).size,
-          requests: filteredEntries.length,
-          bandwidth: filteredEntries.reduce((sum, entry) => sum + entry.bytes, 0),
-        }}
-      />
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <RequestsChart 
-          labels={hourlyRequests.labels}
-          data={hourlyRequests.data}
-          timeInterval={timeInterval}
-        />
-        <WorldMap entries={filteredEntries} />
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <RequestsChart labels={hourlyData.labels} data={hourlyData.data} />
+        <BrowserChart browsers={browserData.browsers} />
       </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <BrowserChart browsers={userAgentData.browsers} />
+
+      <div className="grid grid-cols-1 gap-6 mb-6">
+        <WorldMap entries={filteredData?.entries || []} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         <StatusCodesTable statusCodes={statusCodes} />
-      </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <MostRequestedFiles files={mostRequestedFiles} />
-        <TopIPAddress files={topIPAddress} />
-      </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         <TopReferrers referrers={topReferrers} />
       </div>
-      
-    </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <MostRequestedFiles files={mostRequestedFiles} />
+        <TopIPAddress ipAddresses={topIPAddresses} />
+      </div>
+    </>
   );
 };
 

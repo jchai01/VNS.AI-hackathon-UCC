@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 
-const TopIPAddress = ({ files }) => {
+const TopIPAddress = ({ ipAddresses }) => {
   const [showAssets, setShowAssets] = useState(false);
 
   return (
@@ -14,7 +14,7 @@ const TopIPAddress = ({ files }) => {
           <thead className="bg-gray-50 sticky top-0 z-10">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Page
+                IP Address
               </th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Hits
@@ -22,7 +22,7 @@ const TopIPAddress = ({ files }) => {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {files.map((item, index) => (
+            {ipAddresses && ipAddresses.map((item, index) => (
               <tr key={index} className="hover:bg-gray-50">
                 <td className="px-6 py-4 whitespace-nowrap text-sm">
                   <div className="truncate max-w-md">{item.ip}</div>
@@ -32,7 +32,7 @@ const TopIPAddress = ({ files }) => {
                 </td>
               </tr>
             ))}
-            {files.length === 0 && (
+            {(!ipAddresses || ipAddresses.length === 0) && (
               <tr>
                 <td colSpan="2" className="px-6 py-4 text-center text-gray-500">
                   No data available

@@ -14,37 +14,37 @@ const StatsOverview = ({ stats }) => {
   };
   
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-      <div className="card flex items-center p-6">
-        <div className="rounded-full bg-indigo-100 p-3 mr-4">
+    <>
+      <div className="card flex items-center p-6 w-full">
+        <div className="rounded-full bg-indigo-100 p-3 mr-4 flex-shrink-0">
           <ChartBarIcon className="h-6 w-6 text-indigo-600" />
         </div>
-        <div>
-          <div className="stats-value">{stats.sessions.toLocaleString()}</div>
-          <div className="stats-label">Sessions</div>
+        <div className="min-w-0 flex-1">
+          <div className="text-2xl font-semibold text-gray-900 truncate">{stats.sessions.toLocaleString()}</div>
+          <div className="text-sm text-gray-500">Sessions</div>
         </div>
       </div>
       
-      <div className="card flex items-center p-6">
-        <div className="rounded-full bg-blue-100 p-3 mr-4">
+      <div className="card flex items-center p-6 w-full">
+        <div className="rounded-full bg-blue-100 p-3 mr-4 flex-shrink-0">
           <UserGroupIcon className="h-6 w-6 text-blue-600" />
         </div>
-        <div>
-          <div className="stats-value">{stats.requests.toLocaleString()}</div>
-          <div className="stats-label">Requests</div>
+        <div className="min-w-0 flex-1">
+          <div className="text-2xl font-semibold text-gray-900 truncate">{stats.requests.toLocaleString()}</div>
+          <div className="text-sm text-gray-500">Requests</div>
         </div>
       </div>
       
-      <div className="card flex items-center p-6">
-        <div className="rounded-full bg-emerald-100 p-3 mr-4">
+      <div className="card flex items-center p-6 w-full">
+        <div className="rounded-full bg-emerald-100 p-3 mr-4 flex-shrink-0">
           <ArrowsRightLeftIcon className="h-6 w-6 text-emerald-600" />
         </div>
-        <div>
-          <div className="stats-value">{formatBytes(stats.bandwidth)}</div>
-          <div className="stats-label">Transferred</div>
+        <div className="min-w-0 flex-1">
+          <div className="text-2xl font-semibold text-gray-900 truncate">{formatBytes(stats.bandwidth)}</div>
+          <div className="text-sm text-gray-500">Transferred</div>
         </div>
       </div>
-    </div>
+    </>
   );
 };
 
