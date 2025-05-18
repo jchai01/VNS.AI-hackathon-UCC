@@ -8,3 +8,8 @@ pyttsx3==2.90
 numpy==1.24.3
 soundfile==0.12.1
 python-dotenv==1.0.0
+plotly==5.14.0
+pandas==1.5.3
+kaleido==0.2.1
+user-agents==2.2.0
+numpy==1.26.4

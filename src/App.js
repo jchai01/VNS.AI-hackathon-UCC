@@ -105,13 +105,13 @@ function App() {
     setIsLoading(true);
     setUploadProgress(0);
     setProcessingProgress(0);
-    
+
     const fileSize = logFile.size;
-    
+
     // Create FormData
     const formData = new FormData();
-    formData.append('file', logFile);
-    
+    formData.append("file", logFile);
+
     // Upload progress handler
     const uploadProgressHandler = (event) => {
       if (event.lengthComputable) {
@@ -126,8 +126,8 @@ function App() {
       body: formData,
       mode: 'cors',
       headers: {
-        'Accept': 'application/json',
-      }
+        Accept: "application/json",
+      },
     })
     .then(async response => {
       console.log('Response status:', response.status);
@@ -159,6 +159,7 @@ function App() {
     });
   };
 
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar onFileUpload={handleLogUpload} />
@@ -182,4 +183,4 @@ function App() {
   );
 }
 
-export default App; 
+export default App;

@@ -105,6 +105,7 @@ export const getTopReferrers = (entries, limit = 5) => {
 export const parseUserAgents = (entries) => {
   const browsers = {};
   const devices = { Desktop: 0, Mobile: 0, Tablet: 0 };
+  const operatingSystems = {};
 
   entries.forEach((entry) => {
     // This is a simplified version - in a real app, use ua-parser-js for accurate parsing
@@ -131,6 +132,19 @@ export const parseUserAgents = (entries) => {
     else device = "Desktop";
 
     devices[device]++;
+    
+    // Extract OS
+    let os;
+    if (ua.includes("windows")) os = "Windows";
+    else if (ua.includes("mac os") || ua.includes("macos")) os = "macOS";
+    else if (ua.includes("ios")) os = "iOS";
+    else if (ua.includes("android")) os = "Android";
+    else if (ua.includes("linux")) os = "Linux";
+    else if (ua.includes("ubuntu")) os = "Ubuntu";
+    else if (ua.includes("chrome os")) os = "ChromeOS";
+    else os = "Other";
+    
+    operatingSystems[os] = (operatingSystems[os] || 0) + 1;
   });
 
   return {
@@ -140,5 +154,85 @@ export const parseUserAgents = (entries) => {
     devices: Object.entries(devices)
       .sort((a, b) => b[1] - a[1])
       .map(([device, hits]) => ({ device, hits })),
+    operatingSystems: Object.entries(operatingSystems)
+      .sort((a, b) => b[1] - a[1])
+      .map(([os, hits]) => ({ os, hits })),
   };
+};
+
+// Get HTTP methods distribution
+export const getHttpMethodsDistribution = (entries) => {
+  const methodCounts = {};
+
+  entries.forEach((entry) => {
+    const method = entry.method || 'Unknown';
+    methodCounts[method] = (methodCounts[method] || 0) + 1;
+  });
+
+  return Object.entries(methodCounts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([method, hits]) => ({ method, hits }));
+};
+
+// Get human vs bot traffic
+export const getHumanVsBotTraffic = (entries) => {
+  let humans = 0;
+  let bots = 0;
+
+  entries.forEach((entry) => {
+    const ua = entry.userAgent.toLowerCase();
+    // Simple bot detection - could be improved with better detection
+    if (
+      ua.includes('bot') || 
+      ua.includes('spider') || 
+      ua.includes('crawl') ||
+      ua.includes('scrape')
+    ) {
+      bots++;
+    } else {
+      humans++;
+    }
+  });
+
+  return [
+    { type: 'Human', hits: humans },
+    { type: 'Bot', hits: bots }
+  ];
+};
+
+// Get response size distribution
+export const getResponseSizeDistribution = (entries) => {
+  const sizeCategories = {
+    '0 B': 0,
+    '<1 KB': 0,
+    '1-10 KB': 0,
+    '10-100 KB': 0,
+    '100 KB-1 MB': 0,
+    '>1 MB': 0
+  };
+
+  entries.forEach((entry) => {
+    const bytes = entry.bytes;
+    if (bytes === 0) {
+      sizeCategories['0 B']++;
+    } else if (bytes < 1024) {
+      sizeCategories['<1 KB']++;
+    } else if (bytes < 10 * 1024) {
+      sizeCategories['1-10 KB']++;
+    } else if (bytes < 100 * 1024) {
+      sizeCategories['10-100 KB']++;
+    } else if (bytes < 1024 * 1024) {
+      sizeCategories['100 KB-1 MB']++;
+    } else {
+      sizeCategories['>1 MB']++;
+    }
+  });
+
+  // Define order for categories for consistent display
+  const categoryOrder = ['0 B', '<1 KB', '1-10 KB', '10-100 KB', '100 KB-1 MB', '>1 MB'];
+  
+  return categoryOrder.map(category => ({
+    category,
+    count: sizeCategories[category]
+  }));
 };

@@ -1,11 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { 
   getRequestsByHourOfDay, 
   getMostRequestedFiles, 
   getStatusCodeDistribution, 
   getTopReferrers, 
   parseUserAgents, 
-  getTopIPAddress
+  getTopIPAddress,
+  getHttpMethodsDistribution,
+  getHumanVsBotTraffic,
+  getResponseSizeDistribution
 } from '../utils/logUtils';
 import { format } from 'date-fns';
 
