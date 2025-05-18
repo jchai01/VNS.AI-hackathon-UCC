@@ -31,7 +31,7 @@ function App() {
     };
     
     // Send the file to the backend
-    fetch('http://localhost:5001/api/parse-log', {
+    fetch('https://landfutures-oidc.insight-centre.org/api/parse-log', {
       method: 'POST',
       body: formData,
       mode: 'cors',

@@ -25,6 +25,9 @@ import OsDistributionChart from '../components/OsDistributionChart';
 import HumanVsBotChart from '../components/HumanVsBotChart';
 import ResponseSizeChart from '../components/ResponseSizeChart';
 import AnomalyDetection from '../components/AnomalyDetection';
+import AnomalyTimeline from '../components/AnomalyTimeline';
+import AnomalySummary from '../components/AnomalySummary';
+// import AnomalyCorrelationMatrix from '../components/AnomalyCorrelationMatrix';
 
 const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) => {
   const [hourlyRequests, setHourlyRequests] = useState({ labels: [], data: [] });
@@ -517,6 +520,17 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
         }}
       />
       
+      
+      {/* Add Anomaly Correlation Section
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <div className="md:col-span-2">
+          <AnomalyCorrelationMatrix 
+            anomalyData={anomalyData}
+            logData={filteredEntries} 
+          />
+        </div>
+      </div> */}
+      
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         <RequestsChart 
           labels={hourlyRequests.labels}
@@ -550,6 +564,17 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
         <HumanVsBotChart trafficData={humanVsBotTraffic} />
         <AnomalyDetection anomalyData={anomalyData} isLoading={isLoadingAnomalies} />
       </div>
+
+      {/* Add Anomaly Timeline */}
+      <div className="mb-6">
+        <AnomalyTimeline 
+          anomalyData={anomalyData} 
+          logData={filteredEntries} 
+        />
+      </div>
+      
+      {/* Add Anomaly Summary */}
+      <AnomalySummary anomalyData={anomalyData} />
     </div>
   );
 };
