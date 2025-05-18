@@ -1,6 +1,6 @@
 {
-  "short_name": "Log Analyzer",
-  "name": "Nginx Access Log Analyzer",
+  "short_name": "VSLog Analyzer",
+  "name": "VSLog Analyzer",
   "icons": [
     {
       "src": "favicon.ico",

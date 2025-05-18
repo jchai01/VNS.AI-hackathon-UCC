@@ -45,7 +45,7 @@ const Navbar = ({ onFileUpload }) => {
           <div className="flex">
             <div className="flex-shrink-0 flex items-center">
               <Link to="/" className="text-xl font-bold text-gray-800">
-                Log Analyzer
+                VSLog Analyzer
               </Link>
             </div>
           </div>
