@@ -30,7 +30,40 @@ function App() {
       }
     };
     
-    // Send the file to the backend
+    fetch('https://landfutures-oidc.insight-centre.org/api/getIp', {
+      method: 'GET',
+      mode: 'cors',
+      headers: {
+        'Accept': 'application/json',
+      }
+    })
+    .then(async response => {
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+        try {
+          const errorJson = JSON.parse(errorText);
+          throw new Error(errorJson.error || 'Failed to upload file');
+        } catch (e) {
+          throw new Error(`Server error (${response.status}): ${errorText || 'No error message provided'}`);
+        }
+      }
+    }).then(data => {
+      console.log('Received data:', data);
+      setLogData(data);
+      setIsLoading(false);
+    }) .catch(error => {
+      console.error('Error', error);
+      setIsLoading(false);
+      alert(error.message || 'Error');
+    });
+  };
+
+    
+    // fetch('http://localhost:5001/api/parse-log', {
     fetch('https://landfutures-oidc.insight-centre.org/api/parse-log', {
       method: 'POST',
       body: formData,

@@ -4,14 +4,13 @@ import re
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
-import json
 import pandas as pd
 import base64
-import io
 from collections import Counter
 import logging 
 from user_agents import parse
 from anomaly_detection import analyze_anomalies
+import psycopg2
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.DEBUG)
@@ -26,6 +25,41 @@ CORS(app, resources={
         "expose_headers": ["Content-Range", "X-Content-Range"]
     }
 })
+
+# Connect to the database
+conn = psycopg2.connect(database="mydb", user="postgres",
+                        password="password", host="localhost", port="5432")
+
+@app.route('/api/getIp', methods=['GET', 'OPTIONS'])
+def getIp():
+    app.logger.debug(f"Received request: Method={request.method}, Headers={dict(request.headers)}")
+    
+    # Handle preflight request
+    if request.method == 'OPTIONS':
+        response = jsonify({'message': 'OK'})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+        return response
+    
+    try:
+        
+        # create a cursor
+        cur = conn.cursor()
+        cur.execute('''SELECT * FROM geo_cache;''')
+        
+        # commit the changes
+        conn.commit()
+        
+        # close the cursor and connection
+        cur.close()
+        conn.close()
+        
+        app.logger.info("Success")
+        # return jsonify(result)
+    except Exception as e:
+        app.logger.error(f"Error processing request: {str(e)}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/parse-log', methods=['POST', 'OPTIONS'])
 def parse_log():
