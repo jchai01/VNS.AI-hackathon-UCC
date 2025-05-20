@@ -1,0 +1,13 @@
+{
+  "files": {
+    "main.css": "/vns.ai-hackathon-ucc/static/css/main.ea208597.css",
+    "main.js": "/vns.ai-hackathon-ucc/static/js/main.b7336320.js",
+    "index.html": "/vns.ai-hackathon-ucc/index.html",
+    "main.ea208597.css.map": "/vns.ai-hackathon-ucc/static/css/main.ea208597.css.map",
+    "main.b7336320.js.map": "/vns.ai-hackathon-ucc/static/js/main.b7336320.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.ea208597.css",
+    "static/js/main.b7336320.js"
+  ]
+}
