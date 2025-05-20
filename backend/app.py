@@ -1,18 +1,27 @@
 from flask import Flask, request, jsonify, send_file
-from flask_cors import CORS
+from flask_cors import CORS, cross_origin
+from flask import Response
 import re
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 import json
+import logging
+from chat_routes import chat_bp
+from dotenv import load_dotenv
+import os
+
+# Load environment variables
+load_dotenv()
 import pandas as pd
 import base64
-import io
 from collections import Counter
 import logging 
 from user_agents import parse
 from anomaly_detection import analyze_anomalies
 import os
+import psycopg2
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.DEBUG)
@@ -28,7 +37,80 @@ CORS(app, resources={
     }
 })
 
-@app.route('/api/parse-log', methods=['POST', 'OPTIONS'])
+# Register the chat blueprint
+app.register_blueprint(chat_bp)
+
+# @app.route('/api/parse-log', methods=['POST', 'OPTIONS'])
+# def parse_log():
+#     app.logger.debug(f"Received request: Method={request.method}, Headers={dict(request.headers)}")
+    
+#     # Handle preflight request
+#     if request.method == 'OPTIONS':
+#         response = jsonify({'message': 'OK'})
+#         response.headers.add('Access-Control-Allow-Origin', '*')
+#         response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+#         response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+#         return response
+    
+#     try:
+        
+#         # create a cursor
+#         cur = conn.cursor()
+#         cur.execute('''SELECT * FROM geo_cache;''')
+        
+#         # commit the changes
+#         conn.commit()
+        
+#         # close the cursor and connection
+#         cur.close()
+#         conn.close()
+        
+#         app.logger.info("Success")
+#         # return jsonify(result)
+#     except Exception as e:
+#         app.logger.error(f"Error processing request: {str(e)}", exc_info=True)
+#         return jsonify({"error": str(e)}), 500
+
+#@app.route('/api/parse-log', methods=['POST', 'OPTIONS'])
+#CORS(app)  # Enable CORS for all routes
+
+#app.wsgi_app = ProxyFix(
+#    app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1
+#)
+
+#CORS(app, resources={
+#        r"/*": {
+#            #"origins": ["*"],  # Allow all origins (replace with your frontend URL in production)
+#            "origins": ["https://landfutures-oidc.insight-centre.org/"],  # Allow all origins (replace with your frontend URL in production)
+#            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+#            "allow_headers": ["Content-Type", "Authorization"]
+#        }
+#     },
+#     supports_credentials=True)  # If using cookies/auth
+
+
+white = ['http://localhost:8080','http://localhost:9000', 'https://landfutures-oidc.insight-centre.org']
+
+@app.before_request
+def basic_authentication():
+    if request.method.lower() == 'options':
+        return Response()
+
+@app.after_request
+def add_cors_headers(response):
+    r = request.referrer[:-1]
+    if r in white:
+        response.headers.add('Access-Control-Allow-Origin', r)
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        response.headers.add('Access-Control-Allow-Headers', 'Cache-Control')
+        response.headers.add('Access-Control-Allow-Headers', 'X-Requested-With')
+        response.headers.add('Access-Control-Allow-Headers', 'Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE')
+    return response
+
+@app.route('/api/parse-log', methods=['GET', 'POST', 'OPTIONS'])
+@cross_origin(origin='*')
 def parse_log():
     app.logger.debug(f"Received request: Method={request.method}, Headers={dict(request.headers)}")
     
@@ -36,7 +118,8 @@ def parse_log():
     if request.method == 'OPTIONS':
         response = jsonify({'message': 'OK'})
         response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        #response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Headers', '*')
         response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
         return response
     
@@ -424,6 +507,7 @@ def parse_nginx_log(lines):
                 method, path, http_version = '', '', ''
             else:
                 # If neither regex matches, skip this line
+                print(f"Skipping unmatched line: {line}")
                 continue
         else:
             # Extract values from standard log format
@@ -448,12 +532,24 @@ def parse_nginx_log(lines):
                 parsed_date = datetime(int(year), month_num, int(day), 
                                       int(hour), int(minute), int(second))
                 date_time_iso = parsed_date.isoformat()
+                print(f"Date parsing details:", {
+                    'original': date_time,
+                    'day': day,
+                    'month': month,
+                    'year': year,
+                    'hour': hour,
+                    'minute': minute,
+                    'second': second,
+                    'parsed_iso': date_time_iso
+                })
             else:
+                print(f"Failed to match date pattern in: {date_time}")
                 date_time_iso = None
-        except Exception:
+        except Exception as e:
+            print(f"Error parsing date {date_time}: {str(e)}")
             date_time_iso = None
         
-        parsed_entries.append({
+        entry = {
             "ipAddress": ip_address,
             "dateTime": date_time_iso,
             "method": method,
@@ -462,8 +558,11 @@ def parse_nginx_log(lines):
             "bytes": int(bytes_sent),
             "referer": referer if referer != '-' else None,
             "userAgent": user_agent
-        })
+        }
+        print(f"Parsed entry:", entry)
+        parsed_entries.append(entry)
     
+    print(f"Total entries parsed: {len(parsed_entries)}")
     return parsed_entries
 
 # Add new endpoint to serve the geolocation CSV data
@@ -496,4 +595,8 @@ def get_geolocation_data():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', debug=True, port=5001) 
+    port = int(os.getenv('PORT', 5001))
+    host = os.getenv('HOST', '0.0.0.0')
+    debug = os.getenv('FLASK_DEBUG', '1') == '1'
+    
+    app.run(host=host, port=port, debug=debug) 

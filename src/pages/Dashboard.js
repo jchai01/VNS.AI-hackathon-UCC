@@ -29,7 +29,7 @@ import AnomalyTimeline from '../components/AnomalyTimeline';
 import AnomalySummary from '../components/AnomalySummary';
 // import AnomalyCorrelationMatrix from '../components/AnomalyCorrelationMatrix';
 
-const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) => {
+const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress, filters = {} }) => {
   const [hourlyRequests, setHourlyRequests] = useState({ labels: [], data: [] });
   const [mostRequestedFiles, setMostRequestedFiles] = useState([]);
   const [statusCodes, setStatusCodes] = useState([]);
@@ -71,6 +71,49 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
   // Add state for export loading
   const [exportLoading, setExportLoading] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
+  
+  // Track if filters were updated by chatbot
+  const [chatbotUpdated, setChatbotUpdated] = useState(false);
+  
+  // Track if filters were auto-adjusted
+  const [filterAdjusted, setFilterAdjusted] = useState(false);
+  const [adjustmentMessage, setAdjustmentMessage] = useState('');
+  
+  // Add effect to handle filter changes from chatbot
+  useEffect(() => {
+    if (filters && Object.keys(filters).some(key => filters[key])) {
+      console.log('Filters received from chatbot:', filters);
+      setChatbotUpdated(true);
+      
+      // Update date filters
+      if (filters.dateFrom) {
+        console.log('Setting startDate to:', filters.dateFrom);
+        setStartDate(filters.dateFrom);
+      }
+      if (filters.dateTo) {
+        console.log('Setting endDate to:', filters.dateTo);
+        setEndDate(filters.dateTo);
+      }
+      
+      // Update method filter
+      if (filters.method) {
+        console.log('Setting methodFilter to:', filters.method);
+        setMethodFilter(filters.method);
+      }
+      
+      // Update status code filter
+      if (filters.statusCode) {
+        console.log('Setting statusCodeFilter to:', filters.statusCode);
+        setStatusCodeFilter(filters.statusCode);
+      }
+      
+      // Update IP address filter (if path contains IP)
+      if (filters.path && filters.path.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/)) {
+        console.log('Setting ipAddressFilter to:', filters.path);
+        setIpAddressFilter(filters.path);
+      }
+    }
+  }, [filters]);
   
   // Set initial date range and filename based on log data
   useEffect(() => {
@@ -144,11 +187,112 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
   useEffect(() => {
     if (!logData || !logData.entries) return;
     
+    console.log('Filter state changed, applying filters:');
+    console.log('- startDate:', startDate);
+    console.log('- endDate:', endDate);
+    console.log('- methodFilter:', methodFilter);
+    console.log('- ipAddressFilter:', ipAddressFilter);
+    console.log('- statusCodeFilter:', statusCodeFilter);
+    console.log('- countryFilter:', countryFilter);
+    
+    // Get actual date range from log data
+    const allDates = logData.entries.map(entry => new Date(entry.dateTime));
+    const minDate = new Date(Math.min(...allDates));
+    const maxDate = new Date(Math.max(...allDates));
+    
     // Convert string dates to Date objects for comparison
-    const startDateTime = new Date(startDate);
-    const endDateTime = new Date(endDate);
+    let startDateTime = startDate ? new Date(startDate) : new Date(0);
+    let endDateTime = endDate ? new Date(endDate) : new Date();
+    let adjustments = [];
+    
+    // Check if we're using the default future dates (17/04/2025 to 02/05/2025)
+    const isUsingDefaultFutureDates = (
+      // Check for default start date in various formats
+      (startDate === '2025-04-17' || 
+       startDate.includes('2025-04-17') || 
+       startDate.includes('17/04/2025')) &&
+      
+      // Check for default end date in various formats
+      (endDate === '2025-05-02' || 
+       endDate === '2025-05-01' || // Also accept 05-01 as it might be converted
+       endDate.includes('2025-05-02') || 
+       endDate.includes('02/05/2025'))
+    );
+      
+    console.log('Log data date range:', minDate.toISOString(), 'to', maxDate.toISOString());
+      
+    // If using default future dates, map them to actual date range of log data
+    if (isUsingDefaultFutureDates) {
+      console.log('Using default future date range, mapping to actual log data range');
+      
+      // Use actual log data date range
+      startDateTime = minDate;
+      endDateTime = maxDate;
+      
+      // Update UI state to show the actual date range used
+      setStartDate(minDate.toISOString().split('T')[0]);
+      setEndDate(maxDate.toISOString().split('T')[0]);
+      
+      console.log('Mapped default future dates to actual log range:', 
+          minDate.toISOString().split('T')[0], 'to', maxDate.toISOString().split('T')[0]);
+    } else {
+      // Check if date range is valid (start date should be before end date)
+      const isInvalidDateRange = startDateTime > endDateTime;
+      if (isInvalidDateRange) {
+        console.warn('Invalid date range: start date is after end date');
+        adjustments.push('invalid date range detected (start date is after end date)');
+        
+        // Swap the dates to make the range valid
+        [startDateTime, endDateTime] = [endDateTime, startDateTime];
+        
+        // Update UI state to show the actual date range used
+        setStartDate(startDateTime.toISOString().split('T')[0]);
+        setEndDate(endDateTime.toISOString().split('T')[0]);
+      }
+      
+      // If dates are outside the range of actual log data, use log data's date range
+      if (startDateTime > maxDate || endDateTime < minDate) {
+        console.log('Date filter would return 0 results - using log data date range instead');
+        startDateTime = minDate;
+        endDateTime = maxDate;
+        
+        // Update UI state to show the actual date range used
+        setStartDate(startDateTime.toISOString().split('T')[0]);
+        setEndDate(endDateTime.toISOString().split('T')[0]);
+        
+        adjustments.push('date range adjusted to match available data');
+      }
+    }
+    
     // Set end date to end of day
     endDateTime.setHours(23, 59, 59, 999);
+    
+    // Check if status code exists in data
+    if (statusCodeFilter !== 'all' && statusCodeFilter !== '') {
+      const statusExists = logData.entries.some(entry => 
+        entry.statusCode.toString() === statusCodeFilter
+      );
+      
+      if (!statusExists) {
+        console.log(`Status code ${statusCodeFilter} not found in log data - using 'all' instead`);
+        setStatusCodeFilter('all');
+        adjustments.push(`status code ${statusCodeFilter} not found in data`);
+        return; // Exit early, will re-run when statusCodeFilter changes
+      }
+    }
+    
+    // Show notification if filters were adjusted
+    if (adjustments.length > 0) {
+      setFilterAdjusted(true);
+      setAdjustmentMessage(`Filters adjusted: ${adjustments.join(', ')}`);
+      
+      // Auto-hide the notification after 5 seconds
+      setTimeout(() => {
+        setFilterAdjusted(false);
+      }, 5000);
+    } else {
+      setFilterAdjusted(false);
+    }
     
     // Filter entries by all filters
     const filtered = logData.entries.filter(entry => {
@@ -157,25 +301,28 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
       const passesDateFilter = entryDate >= startDateTime && entryDate <= endDateTime;
       
       // Method filter
-      const passesMethodFilter = methodFilter === 'all' || entry.method === methodFilter;
+      const passesMethodFilter = methodFilter === 'all' || methodFilter === '' || entry.method === methodFilter;
       
       // IP address filter
       const passesIpFilter = !ipAddressFilter || entry.ipAddress.includes(ipAddressFilter);
       
       // Status code filter
-      const passesStatusFilter = statusCodeFilter === 'all' || entry.statusCode.toString() === statusCodeFilter;
+      const passesStatusFilter = statusCodeFilter === 'all' || statusCodeFilter === '' || entry.statusCode.toString() === statusCodeFilter;
       
       // Country filter
-      const passesCountryFilter = countryFilter === 'all' || entry.country === countryFilter;
+      const passesCountryFilter = countryFilter === 'all' || countryFilter === '' || entry.country === countryFilter;
       
       return passesDateFilter && passesMethodFilter && passesIpFilter && passesStatusFilter && passesCountryFilter;
     });
     
+    console.log(`Filtered entries: ${filtered.length} of ${logData.entries.length}`);
     setFilteredEntries(filtered);
   }, [startDate, endDate, methodFilter, ipAddressFilter, statusCodeFilter, countryFilter, logData]);
   
   // Process filtered data for charts
   useEffect(() => {
+    console.log(`Processing ${filteredEntries.length} filtered entries for charts`);
+    
     if (filteredEntries.length > 0) {
       // Process data for charts based on filtered entries
       if (timeInterval === 'hourly') {
@@ -186,6 +333,7 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
         setHourlyRequests(dailyData);
       }
       
+      // Update all chart data with filtered entries
       setMostRequestedFiles(getMostRequestedFiles(filteredEntries));
       setStatusCodes(getStatusCodeDistribution(filteredEntries));
       setTopReferrers(getTopReferrers(filteredEntries));
@@ -193,6 +341,22 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
       setHttpMethods(getHttpMethodsDistribution(filteredEntries));
       setHumanVsBotTraffic(getHumanVsBotTraffic(filteredEntries));
       setResponseSizeData(getResponseSizeDistribution(filteredEntries));
+      setTopIPAddress(getTopIPAddress(filteredEntries));
+      
+      console.log('All chart data updated with filtered entries.');
+    } else {
+      // Handle empty data sets with appropriate empty state values
+      console.log('No entries match the current filters, setting empty chart data');
+      
+      setHourlyRequests({ labels: [], data: [] });
+      setMostRequestedFiles([]);
+      setStatusCodes([]);
+      setTopReferrers([]);
+      setUserAgentData({ browsers: [], devices: [], operatingSystems: [] });
+      setHttpMethods([]);
+      setHumanVsBotTraffic([]);
+      setResponseSizeData([]);
+      setTopIPAddress([]);
     }
   }, [filteredEntries, timeInterval]);
   
@@ -249,10 +413,18 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
   
   // Clear all filters
   const clearFilters = () => {
+    console.log('Clearing all filters');
+    setChatbotUpdated(false);
     setMethodFilter('all');
     setIpAddressFilter('');
     setStatusCodeFilter('all');
     setCountryFilter('all');
+    
+    // Reset dates to full date range
+    if (dateRange.min && dateRange.max) {
+      setStartDate(dateRange.min);
+      setEndDate(dateRange.max);
+    }
   };
   
   // Function to export HTML summary report
@@ -356,53 +528,67 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
   
   if (isLoading) {
     return (
-      <div className="bg-white rounded-lg shadow-md p-8 text-center">
-        <h2 className="text-2xl font-semibold text-gray-800 mb-6">Processing Log File</h2>
-        
-        <div className="max-w-xl mx-auto mb-8">
-          <div className="mb-6">
-            <div className="flex justify-between mb-1">
-              <span className="text-sm font-medium text-gray-700">Uploading</span>
-              <span className="text-sm font-medium text-gray-700">{uploadProgress}%</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-2.5">
-              <div 
-                className="bg-primary-600 h-2.5 rounded-full transition-all duration-300" 
-                style={{ width: `${uploadProgress}%` }}
-              ></div>
-            </div>
-          </div>
+      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)]">
+        <div className="bg-white rounded-lg shadow-md p-8 text-center max-w-xl w-full">
+          <h2 className="text-2xl font-semibold text-gray-800 mb-6">Processing Log File</h2>
           
-          {uploadProgress === 100 && (
-            <div className="mb-2">
+          <div className="mb-8">
+            <div className="mb-6">
               <div className="flex justify-between mb-1">
-                <span className="text-sm font-medium text-gray-700">Processing</span>
-                <span className="text-sm font-medium text-gray-700">{processingProgress}%</span>
+                <span className="text-sm font-medium text-gray-700">Uploading</span>
+                <span className="text-sm font-medium text-gray-700">{uploadProgress}%</span>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-2.5">
+              <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
                 <div 
-                  className="bg-green-500 h-2.5 rounded-full transition-all duration-300" 
-                  style={{ width: `${processingProgress}%` }}
+                  className="bg-blue-600 h-2.5 rounded-full transition-all duration-300" 
+                  style={{ width: `${uploadProgress}%` }}
                 ></div>
               </div>
             </div>
-          )}
-          
-          <div className="text-gray-600 mt-4">
-            {uploadProgress < 100 ? (
-              <p>Uploading log file, please wait...</p>
-            ) : (
-              <p>Analyzing log data. This may take a moment for large files.</p>
+            
+            {uploadProgress === 100 && (
+              <div className="mb-2">
+                <div className="flex justify-between mb-1">
+                  <span className="text-sm font-medium text-gray-700">Processing</span>
+                  <span className="text-sm font-medium text-gray-700">{processingProgress}%</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
+                  <div 
+                    className="bg-green-500 h-2.5 rounded-full transition-all duration-300" 
+                    style={{ width: `${processingProgress}%` }}
+                  ></div>
+                </div>
+              </div>
             )}
-          </div>
+            
+            <div className="text-gray-600 mt-6 flex flex-col items-center">
+              {uploadProgress < 100 ? (
+                <>
+                  <svg className="animate-spin h-10 w-10 text-blue-500 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <p>Uploading log file, please wait...</p>
+                </>
+              ) : (
+                <>
+                  <svg className="animate-spin h-10 w-10 text-green-500 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <p>Analyzing log data. This may take a moment for large files.</p>
+                </>
+              )}
+            </div>
 
-          <div className="mt-6 text-xs text-gray-500">
-            <p>Current operation: {uploadProgress < 100 ? 'Reading file' : 'Parsing log entries'}</p>
-            {processingProgress > 0 && (
-              <p className="mt-1">
-                Processed {processingProgress}% of log entries
-              </p>
-            )}
+            <div className="mt-6 text-xs text-gray-500">
+              <p>Current operation: {uploadProgress < 100 ? 'Reading file' : 'Parsing log entries'}</p>
+              {processingProgress > 0 && (
+                <p className="mt-1">
+                  Processed {processingProgress}% of log entries
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -411,10 +597,49 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
   
   if (!logData) {
     return (
-      <div className="bg-white rounded-lg shadow-md p-8 text-center">
-        <h2 className="text-2xl font-semibold text-gray-800 mb-2">Welcome to VS Log Analyzer</h2>
-        <p className="text-gray-600 mb-6">Upload an Nginx access log file to get started</p>
-        
+      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)]">
+        <div className="bg-white rounded-lg shadow-md p-8 text-center w-full max-w-2xl">
+          <h2 className="text-3xl font-semibold text-gray-800 mb-2">Welcome to VS Log Analyzer</h2>
+          <p className="text-gray-600 mb-8">Upload an Nginx access log file to get started with your log analysis</p>
+          
+          <div className="mt-8 space-y-6">
+            <div className="flex items-center border-b border-gray-200 pb-6">
+              <div className="flex-shrink-0 bg-blue-100 p-3 rounded-full">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+              </div>
+              <div className="ml-4 text-left">
+                <h3 className="text-lg font-medium text-gray-900">Upload Your Log File</h3>
+                <p className="mt-1 text-sm text-gray-500">Click the upload button in the navigation bar to select and upload your log file.</p>
+              </div>
+            </div>
+            
+            <div className="flex items-center border-b border-gray-200 pb-6">
+              <div className="flex-shrink-0 bg-green-100 p-3 rounded-full">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+              <div className="ml-4 text-left">
+                <h3 className="text-lg font-medium text-gray-900">Analyze Your Data</h3>
+                <p className="mt-1 text-sm text-gray-500">View interactive charts, tables, and insights to understand your web traffic patterns.</p>
+              </div>
+            </div>
+            
+            <div className="flex items-center">
+              <div className="flex-shrink-0 bg-purple-100 p-3 rounded-full">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+              </div>
+              <div className="ml-4 text-left">
+                <h3 className="text-lg font-medium text-gray-900">Export Reports</h3>
+                <p className="mt-1 text-sm text-gray-500">Generate detailed reports with insights and charts that you can share with your team.</p>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -430,6 +655,22 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
             : 'bg-white shadow-md rounded-lg'
         }`}
       >
+        {/* Filter adjustment notification */}
+        {filterAdjusted && (
+          <div className="bg-yellow-100 border-yellow-400 border-l-4 p-2 text-sm text-yellow-800">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p>{adjustmentMessage}</p>
+              </div>
+            </div>
+          </div>
+        )}
+        
         {/* Basic filter info - always visible */}
         <div className="p-4 flex justify-between items-center">
           <div className="flex items-center">
@@ -568,12 +809,19 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
             <div className="border-t border-gray-200 pt-4">
               <div className="flex justify-between items-center mb-3">
                 <h3 className="text-sm font-medium text-gray-700">Additional Filters</h3>
-                <button
-                  onClick={clearFilters}
-                  className="text-xs text-blue-600 hover:text-blue-800"
-                >
-                  Clear all filters
-                </button>
+                <div className="flex items-center">
+                  {chatbotUpdated && (
+                    <span className="text-xs bg-blue-100 text-blue-800 py-1 px-2 rounded-full mr-2">
+                      Updated by chatbot
+                    </span>
+                  )}
+                  <button
+                    onClick={clearFilters}
+                    className="text-xs text-blue-600 hover:text-blue-800"
+                  >
+                    Clear all filters
+                  </button>
+                </div>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -583,7 +831,7 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
                   <select
                     id="methodFilter"
                     className="px-3 py-2 border border-gray-300 rounded text-sm"
-                    value={methodFilter}
+                    value={methodFilter === '' ? 'all' : methodFilter}
                     onChange={(e) => setMethodFilter(e.target.value)}
                   >
                     <option value="all">All Methods</option>
@@ -612,7 +860,7 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
                   <select
                     id="statusFilter"
                     className="px-3 py-2 border border-gray-300 rounded text-sm"
-                    value={statusCodeFilter}
+                    value={statusCodeFilter === '' ? 'all' : statusCodeFilter}
                     onChange={(e) => setStatusCodeFilter(e.target.value)}
                   >
                     <option value="all">All Status Codes</option>
@@ -650,65 +898,77 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress }) =
         stats={{
           sessions: new Set(filteredEntries.map(entry => entry.ipAddress)).size,
           requests: filteredEntries.length,
-          bandwidth: filteredEntries.reduce((sum, entry) => sum + entry.bytes, 0),
+          bandwidth: filteredEntries.reduce((sum, entry) => sum + (entry.bytes || 0), 0),
         }}
       />
       
-      
-      {/* Add Anomaly Correlation Section
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <div className="md:col-span-2">
-          <AnomalyCorrelationMatrix 
-            anomalyData={anomalyData}
-            logData={filteredEntries} 
-          />
-        </div>
-      </div> */}
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <RequestsChart 
-          labels={hourlyRequests.labels}
-          data={hourlyRequests.data}
-          timeInterval={timeInterval}
-        />
-        <WorldMap logData={filteredEntries} anomalyData={anomalyData} />
-      </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <BrowserChart browsers={userAgentData.browsers} />
-        <StatusCodesTable statusCodes={statusCodes} />
-      </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <MostRequestedFiles files={mostRequestedFiles} />
-        <TopIPAddress files={topIPAddress} />
-      </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <TopReferrers referrers={topReferrers} />
-        <HttpMethodsChart methods={httpMethods} />
-      </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <OsDistributionChart osData={userAgentData.operatingSystems} />
-        <ResponseSizeChart sizeData={responseSizeData} />
-      </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <HumanVsBotChart trafficData={humanVsBotTraffic} />
-        <AnomalyDetection anomalyData={anomalyData} isLoading={isLoadingAnomalies} />
-      </div>
+      {/* Only show the rest of the dashboard if there are filtered entries */}
+      {filteredEntries.length > 0 ? (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <RequestsChart 
+              labels={hourlyRequests.labels}
+              data={hourlyRequests.data}
+              timeInterval={timeInterval}
+            />
+            <WorldMap logData={filteredEntries} anomalyData={anomalyData} />
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <BrowserChart browsers={userAgentData.browsers} />
+            <StatusCodesTable statusCodes={statusCodes} />
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <MostRequestedFiles files={mostRequestedFiles} />
+            <TopIPAddress ipAddresses={topIPAddress} />
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <TopReferrers referrers={topReferrers} />
+            <HttpMethodsChart methods={httpMethods} />
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <OsDistributionChart osData={userAgentData.operatingSystems} />
+            <ResponseSizeChart sizeData={responseSizeData} />
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <HumanVsBotChart trafficData={humanVsBotTraffic} />
+            <AnomalyDetection anomalyData={anomalyData} isLoading={isLoadingAnomalies} />
+          </div>
 
-      {/* Add Anomaly Timeline */}
-      <div className="mb-6">
-        <AnomalyTimeline 
-          anomalyData={anomalyData} 
-          logData={filteredEntries} 
-        />
-      </div>
-      
-      {/* Add Anomaly Summary */}
-      <AnomalySummary anomalyData={anomalyData} />
+          {/* Add Anomaly Timeline */}
+          <div className="mb-6">
+            <AnomalyTimeline 
+              anomalyData={anomalyData} 
+              logData={filteredEntries} 
+            />
+          </div>
+          
+          {/* Add Anomaly Summary */}
+          <AnomalySummary anomalyData={anomalyData} />
+        </>
+      ) : (
+        <div className="bg-white rounded-lg shadow-md p-8 my-6 text-center">
+          <div className="flex flex-col items-center justify-center p-6">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-24 w-24 text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+            <h3 className="text-xl font-medium text-gray-700 mb-2">No data matches your filters</h3>
+            <p className="text-gray-500 mb-6 max-w-md">
+              The current date range or filter combination doesn't match any data in your log file.
+            </p>
+            <button 
+              onClick={clearFilters}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            >
+              Reset Filters
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
