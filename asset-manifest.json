@@ -1,10 +1,10 @@
 {
   "files": {
-    "main.css": "/static/css/main.ea208597.css",
-    "main.js": "/static/js/main.d9fd70a9.js",
-    "index.html": "/index.html",
-    "main.ea208597.css.map": "/static/css/main.ea208597.css.map",
-    "main.d9fd70a9.js.map": "/static/js/main.d9fd70a9.js.map"
+    "main.css": "/VNS.AI-hackathon-UCC/static/css/main.ea208597.css",
+    "main.js": "/VNS.AI-hackathon-UCC/static/js/main.d9fd70a9.js",
+    "index.html": "/VNS.AI-hackathon-UCC/index.html",
+    "main.ea208597.css.map": "/VNS.AI-hackathon-UCC/static/css/main.ea208597.css.map",
+    "main.d9fd70a9.js.map": "/VNS.AI-hackathon-UCC/static/js/main.d9fd70a9.js.map"
   },
   "entrypoints": [
     "static/css/main.ea208597.css",
