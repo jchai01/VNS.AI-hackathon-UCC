@@ -366,7 +366,7 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress, fil
       if (filteredEntries.length > 0) {
         setIsLoadingAnomalies(true);
         try {
-          const response = await fetch('http://localhost:5001/api/analyze-anomalies', {
+          const response = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/analyze-anomalies`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -455,7 +455,7 @@ const Dashboard = ({ logData, isLoading, uploadProgress, processingProgress, fil
       setExportProgress(30); // Data prepared
       
       // Send request to the backend to generate the HTML report
-      const response = await fetch('http://localhost:5001/api/export-summary', {
+      const response = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/export-summary`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -5,7 +5,7 @@
 // Function to load geolocation data from the backend API
 export const loadGeolocationData = async () => {
   try {
-    const response = await fetch('http://localhost:5001/api/geolocation-data');
+    const response = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/geolocation-data`);
     
     if (!response.ok) {
       throw new Error(`Failed to fetch geolocation data: ${response.status} ${response.statusText}`);

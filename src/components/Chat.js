@@ -4,7 +4,6 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // Initialize Google AI with better error handling
 const GEMINI_API_KEY = process.env.REACT_APP_GEMINI_API_KEY;
-console.log('GEMINI_API_KEY:', GEMINI_API_KEY);
 let model = null;
 let genAI = null;
 
@@ -86,7 +85,7 @@ const Chat = ({ onAIResponse, onFilterChange }) => {
     setInputMessage('');
 
     try {
-      const response = await fetch('http://localhost:5001/api/chat', {
+      const response = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

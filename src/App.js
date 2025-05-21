@@ -168,7 +168,7 @@ function App() {
     });
     
     // Set up the request
-    xhr.open('POST', 'http://localhost:5001/api/parse-log', true);
+    xhr.open('post', `${process.env.REACT_APP_BACKEND_URL}/api/parse-log`, true);
     xhr.setRequestHeader('Accept', 'application/json');
     
     // Handle completion
