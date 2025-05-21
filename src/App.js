@@ -229,7 +229,8 @@ function App() {
       <Navbar onFileUpload={handleLogUpload} />
       <main className="container mx-auto px-4 py-8 flex-grow">
         <Routes>
-          <Route path="/" element={
+          {/* path set to /VNS.AI-hackathon-UCC instead of / so that it matches Github Pages hosting url */}
+          <Route path="/VNS.AI-hackathon-UCC" element={
             <Dashboard 
               logData={logData} 
               isLoading={isLoading} 
